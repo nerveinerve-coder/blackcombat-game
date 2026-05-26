@@ -2,7 +2,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF, ContactShadows } from '@react-three/drei'
 import { useEffect, useRef, Suspense, useMemo } from 'react'
 import * as THREE from 'three'
-import { SkeletonUtils } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 
 const ANIMATION_MAP = {
   idle: 'idle',

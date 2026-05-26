@@ -1,90 +1,94 @@
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, ContactShadows } from '@react-three/drei'
 import { useEffect, useRef, Suspense, useMemo } from 'react'
 import * as THREE from 'three'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 
-const ANIMATION_MAP = {
-  idle: 'idle',
-  attack: 'jab',
-  hook: 'mixamo.com',
-  kick: 'kick',
-  hit: 'hit_head',
-  hit_body: 'hit_body',
-  hit_leg: 'hit_leg',
-  groggy: 'hit_head',
-  ko: 'hit_leg',
-  victory: 'victory',
-  guard: 'idle',
-  evade: 'idle',
+const ANIM_MAP = {
+  idle: 'idle', attack: 'jab', hook: 'mixamo.com',
+  kick: 'kick', hit: 'hit_head', hit_body: 'hit_body',
+  hit_leg: 'hit_leg', groggy: 'hit_head', ko: 'hit_leg',
+  victory: 'victory', guard: 'idle', evade: 'idle',
 }
 
-function Fighter({ side, currentState, position }) {
+// 두 파이터를 하나의 컴포넌트에서 관리
+function Fighters({ playerState, opponentState }) {
   const { scene, animations } = useGLTF('/fighter.glb')
-  const mixerRef = useRef(null)
-  const actionsRef = useRef({})
-  const currentActionRef = useRef(null)
-  const groupRef = useRef()
 
-  const clonedScene = useMemo(() => {
-    return SkeletonUtils.clone(scene)
-  }, [scene])
+  const leftRef = useRef()
+  const rightRef = useRef()
+  const leftMixer = useRef()
+  const rightMixer = useRef()
+  const leftActions = useRef({})
+  const rightActions = useRef({})
+  const leftCurrent = useRef(null)
+  const rightCurrent = useRef(null)
+
+  const leftScene = useMemo(() => SkeletonUtils.clone(scene), [scene])
+  const rightScene = useMemo(() => SkeletonUtils.clone(scene), [scene])
+
+  const initFighter = (clonedScene, mixer, actions, current) => {
+    animations.forEach(clip => {
+      actions.current[clip.name] = mixer.current.clipAction(clip, clonedScene)
+    })
+    const idle = actions.current['idle']
+    if (idle) {
+      idle.setLoop(THREE.LoopRepeat, Infinity)
+      idle.play()
+      current.current = idle
+    }
+  }
 
   useEffect(() => {
-    const mixer = new THREE.AnimationMixer(clonedScene)
-    mixerRef.current = mixer
-
-    animations.forEach(clip => {
-      actionsRef.current[clip.name] = mixer.clipAction(clip, clonedScene)
-    })
-
-    const idleAction = actionsRef.current['idle']
-    if (idleAction) {
-      idleAction.setLoop(THREE.LoopRepeat, Infinity)
-      idleAction.play()
-      currentActionRef.current = idleAction
-    }
+    leftMixer.current = new THREE.AnimationMixer(leftScene)
+    rightMixer.current = new THREE.AnimationMixer(rightScene)
+    initFighter(leftScene, leftMixer, leftActions, leftCurrent)
+    initFighter(rightScene, rightMixer, rightActions, rightCurrent)
 
     return () => {
-      mixer.stopAllAction()
-      mixer.uncacheRoot(clonedScene)
+      leftMixer.current?.stopAllAction()
+      rightMixer.current?.stopAllAction()
     }
-  }, [clonedScene, animations])
+  }, [leftScene, rightScene, animations])
 
-  useEffect(() => {
-    const animName = ANIMATION_MAP[currentState] || 'idle'
-    const next = actionsRef.current[animName]
-    const current = currentActionRef.current
-
-    if (!next || next === current) return
-
-    if (current) current.fadeOut(0.2)
+  const switchAnim = (state, actions, current, mixer) => {
+    const animName = ANIM_MAP[state] || 'idle'
+    const next = actions.current[animName]
+    if (!next || next === current.current) return
+    current.current?.fadeOut(0.2)
     next.reset().fadeIn(0.2)
-
     if (['hit_head', 'hit_body', 'hit_leg', 'victory'].includes(animName)) {
       next.setLoop(THREE.LoopOnce, 1)
       next.clampWhenFinished = true
     } else {
       next.setLoop(THREE.LoopRepeat, Infinity)
     }
-
     next.play()
-    currentActionRef.current = next
-  }, [currentState])
+    current.current = next
+  }
+
+  useEffect(() => {
+    switchAnim(playerState, leftActions, leftCurrent, leftMixer)
+  }, [playerState])
+
+  useEffect(() => {
+    switchAnim(opponentState, rightActions, rightCurrent, rightMixer)
+  }, [opponentState])
 
   useFrame((_, delta) => {
-    if (mixerRef.current) mixerRef.current.update(delta)
+    leftMixer.current?.update(delta)
+    rightMixer.current?.update(delta)
   })
 
   return (
-    <group
-      ref={groupRef}
-      position={position}
-      rotation={[0, side === 'right' ? Math.PI : 0, 0]}
-      scale={[0.018, 0.018, 0.018]}
-    >
-      <primitive object={clonedScene} />
-    </group>
+    <>
+      <group ref={leftRef} position={[-1.2, 0, 0]} scale={[0.018, 0.018, 0.018]}>
+        <primitive object={leftScene} />
+      </group>
+      <group ref={rightRef} position={[1.2, 0, 0]} rotation={[0, Math.PI, 0]} scale={[0.018, 0.018, 0.018]}>
+        <primitive object={rightScene} />
+      </group>
+    </>
   )
 }
 
@@ -112,8 +116,7 @@ function Scene({ playerState, opponentState }) {
       <pointLight position={[-3, 3, 2]} intensity={0.6} color="#ffaa44" />
       <pointLight position={[3, 3, 2]} intensity={0.6} color="#4488ff" />
       <CageArena />
-      <Fighter side="left" currentState={playerState} position={[-1.2, 0, 0]} />
-      <Fighter side="right" currentState={opponentState} position={[1.2, 0, 0]} />
+      <Fighters playerState={playerState} opponentState={opponentState} />
     </>
   )
 }
@@ -129,7 +132,7 @@ export default function Fight3DScene({ playerState, opponentState }) {
           powerPreference: 'default',
           failIfMajorPerformanceCaveat: false,
         }}
-        dpr={[1, 1.5]}
+        dpr={[1, 1]}
       >
         <Suspense fallback={null}>
           <Scene playerState={playerState} opponentState={opponentState} />

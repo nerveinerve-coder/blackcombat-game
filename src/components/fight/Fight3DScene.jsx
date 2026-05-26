@@ -24,28 +24,29 @@ function Fighters({ playerState, opponentState }) {
   const leftScene = useMemo(() => SkeletonUtils.clone(scene), [scene])
   const rightScene = useMemo(() => SkeletonUtils.clone(scene), [scene])
 
-  const initFighter = (clonedScene, mixer, actions, current) => {
-    animations.forEach(clip => {
-      actions.current[clip.name] = mixer.current.clipAction(clip, clonedScene)
-    })
-    const idle = actions.current['idle']
-    if (idle) {
-      idle.setLoop(THREE.LoopRepeat, Infinity)
-      idle.play()
-      current.current = idle
-    }
-  }
-
   useEffect(() => {
+    console.log('애니메이션 수:', animations.length)
+    console.log('leftScene:', leftScene.type)
+
     leftMixer.current = new THREE.AnimationMixer(leftScene)
     rightMixer.current = new THREE.AnimationMixer(rightScene)
-    initFighter(leftScene, leftMixer, leftActions, leftCurrent)
-    initFighter(rightScene, rightMixer, rightActions, rightCurrent)
+
+    animations.forEach(clip => {
+      leftActions.current[clip.name] = leftMixer.current.clipAction(clip, leftScene)
+      rightActions.current[clip.name] = rightMixer.current.clipAction(clip, rightScene)
+    })
+
+    const leftIdle = leftActions.current['idle']
+    const rightIdle = rightActions.current['idle']
+
+    if (leftIdle) { leftIdle.setLoop(THREE.LoopRepeat, Infinity); leftIdle.play(); leftCurrent.current = leftIdle }
+    if (rightIdle) { rightIdle.setLoop(THREE.LoopRepeat, Infinity); rightIdle.play(); rightCurrent.current = rightIdle }
+
     return () => {
       leftMixer.current?.stopAllAction()
       rightMixer.current?.stopAllAction()
     }
-  }, [leftScene, rightScene])
+  }, [leftScene, rightScene, animations])
 
   const switchAnim = (state, actions, current) => {
     const animName = ANIM_MAP[state] || 'idle'
@@ -73,10 +74,10 @@ function Fighters({ playerState, opponentState }) {
 
   return (
     <>
-      <group position={[-1.2, 0, 0]} scale={[0.018, 0.018, 0.018]}>
+      <group position={[-1.2, 0, 0]} scale={[0.02, 0.02, 0.02]} rotation={[-Math.PI / 2, 0, 0]}>
         <primitive object={leftScene} />
       </group>
-      <group position={[1.2, 0, 0]} rotation={[0, Math.PI, 0]} scale={[0.018, 0.018, 0.018]}>
+      <group position={[1.2, 0, 0]} rotation={[-Math.PI / 2, 0, Math.PI]} scale={[0.02, 0.02, 0.02]}>
         <primitive object={rightScene} />
       </group>
     </>
@@ -87,12 +88,16 @@ function Floor() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
       <planeGeometry args={[12, 8]} />
-      <meshStandardMaterial color="#1a1209" roughness={1} metalness={0} />
+      <meshStandardMaterial color="#ff0000" roughness={1} metalness={0} />
     </mesh>
   )
 }
 
 function Scene({ playerState, opponentState }) {
+  useEffect(() => {
+    console.log('Scene 렌더링 완료')
+  }, [])
+
   return (
     <>
       <ambientLight intensity={0.8} />
@@ -109,7 +114,7 @@ export default function Fight3DScene({ playerState, opponentState }) {
   return (
     <div style={{ width: '100%', height: '280px', background: '#0a0a0a' }}>
       <Canvas
-        camera={{ position: [0, 1.2, 3.5], fov: 65 }}
+        camera={{ position: [0, 2, 5], fov: 50 }}
         gl={{ antialias: true, powerPreference: 'default' }}
         dpr={[1, 1]}
       >

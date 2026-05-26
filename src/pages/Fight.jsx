@@ -4,7 +4,6 @@ import { MOVES, TYPE_MOVES } from '../game/moves.js'
 import { processTurn, selectAIMove } from '../game/matchEngine.js'
 import HitEffect from '../components/fight/HitEffect.jsx'
 import KOOverlay from '../components/fight/KOOverlay.jsx'
-import Fight3DScene from '../components/fight/Fight3DScene.jsx'
 
 const ACTION_BUTTONS = {
   스트라이커: [
@@ -344,33 +343,46 @@ export default function Fight() {
         </div>
       </div>
 
-      {/* 3D 전투 씬 */}
-      <div className="relative border-b border-gray-800 overflow-hidden">
-        <Fight3DScene
-          player={player}
-          opponent={opponent}
-          playerState={
-            spriteState.playerKO ? 'ko' :
-            spriteState.playerGroggy ? 'groggy' :
-            spriteState.playerHit ? 'hit' :
-            spriteState.playerGuarding ? 'guard' :
-            spriteState.playerEvading ? 'evade' :
-            spriteState.playerAttacking ? 'attack' : 'idle'
-          }
-          opponentState={
-            spriteState.opponentKO ? 'ko' :
-            spriteState.opponentGroggy ? 'groggy' :
-            spriteState.opponentHit ? 'hit' :
-            spriteState.opponentGuarding ? 'guard' :
-            spriteState.opponentEvading ? 'evade' :
-            spriteState.opponentAttacking ? 'attack' : 'idle'
-          }
-        />
+      {/* 전투 씬 */}
+      <div className="relative bg-gradient-to-b from-[#1a0a0a] to-[#0a0a0a] border-b border-gray-800 overflow-hidden"
+        style={{ minHeight: '200px' }}>
+
+        {/* 케이지 배경 */}
+        <div className="absolute inset-0 opacity-10"
+          style={{ backgroundImage: 'repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 40px), repeating-linear-gradient(90deg, #fff 0px, #fff 1px, transparent 1px, transparent 40px)' }} />
+
+        {/* 바닥 라인 */}
+        <div className="absolute bottom-8 left-0 right-0 h-0.5 bg-white/10" />
 
         {/* 히트 이펙트 */}
-        <div className="absolute inset-0 pointer-events-none">
-          <HitEffect trigger={hitEffect.trigger} type={hitEffect.type} side={hitEffect.side} />
+        <HitEffect trigger={hitEffect.trigger} type={hitEffect.type} side={hitEffect.side} />
+
+        {/* 파이터들 */}
+        <div className="relative flex items-end justify-between px-8 pb-6 pt-4 h-full">
+          <FighterSprite
+            fighter={player}
+            side="left"
+            isAttacking={spriteState.playerAttacking}
+            isHit={spriteState.playerHit}
+            isGuarding={spriteState.playerGuarding}
+            isEvading={spriteState.playerEvading}
+            isKO={spriteState.playerKO}
+            isGroggy={spriteState.playerGroggy}
+          />
+
+          {/* 중앙 액션 배너 */}
           <ActionBanner event={currentEvent} />
+
+          <FighterSprite
+            fighter={opponent}
+            side="right"
+            isAttacking={spriteState.opponentAttacking}
+            isHit={spriteState.opponentHit}
+            isGuarding={spriteState.opponentGuarding}
+            isEvading={spriteState.opponentEvading}
+            isKO={spriteState.opponentKO}
+            isGroggy={spriteState.opponentGroggy}
+          />
         </div>
       </div>
 

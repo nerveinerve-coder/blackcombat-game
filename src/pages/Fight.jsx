@@ -1,45 +1,130 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { MOVES, TYPE_MOVES } from '../game/moves.js'
+import { processTurn, selectAIMove } from '../game/matchEngine.js'
+import HitEffect from '../components/fight/HitEffect.jsx'
+import KOOverlay from '../components/fight/KOOverlay.jsx'
 
-const ACTIONS = {
-  striker: [
-    { id: 'jab', name: '잽', type: 'strike', power: 15, speed: 95, stamina: 5 },
-    { id: 'cross', name: '크로스', type: 'strike', power: 25, speed: 75, stamina: 10 },
-    { id: 'hook', name: '훅', type: 'strike', power: 30, speed: 65, stamina: 12 },
-    { id: 'kick', name: '하이킥', type: 'strike', power: 35, speed: 60, stamina: 15 },
-    { id: 'special', name: '필살기', type: 'special', power: 50, speed: 50, stamina: 25 },
+const ACTION_BUTTONS = {
+  스트라이커: [
+    { id: 'jab', label: '잽', sub: '빠름' },
+    { id: 'cross', label: '크로스', sub: '강함' },
+    { id: 'hook', label: '훅', sub: '묵직' },
+    { id: 'lowKick', label: '로우킥', sub: '다리' },
+    { id: 'highKick', label: '하이킥', sub: 'KO' },
+    { id: 'guard', label: '가드', sub: '방어' },
+    { id: 'evade', label: '회피', sub: '피하기' },
   ],
-  grappler: [
-    { id: 'takedown', name: '테이크다운', type: 'grapple', power: 20, speed: 70, stamina: 15 },
-    { id: 'clinch', name: '클린치', type: 'grapple', power: 15, speed: 75, stamina: 10 },
-    { id: 'submission', name: '서브미션 시도', type: 'grapple', power: 40, speed: 55, stamina: 20 },
-    { id: 'slam', name: '슬램', type: 'grapple', power: 35, speed: 50, stamina: 18 },
-    { id: 'special', name: '필살기', type: 'special', power: 55, speed: 45, stamina: 25 },
+  그래플러: [
+    { id: 'jab', label: '잽', sub: '견제' },
+    { id: 'cross', label: '크로스', sub: '강함' },
+    { id: 'takedown', label: '테이크다운', sub: '태클' },
+    { id: 'clinch', label: '클린치', sub: '잡기' },
+    { id: 'submission', label: '서브미션', sub: '관절기' },
+    { id: 'guard', label: '가드', sub: '방어' },
+    { id: 'evade', label: '회피', sub: '피하기' },
   ],
-  wellarounder: [
-    { id: 'jab', name: '잽', type: 'strike', power: 15, speed: 90, stamina: 5 },
-    { id: 'cross', name: '크로스', type: 'strike', power: 25, speed: 72, stamina: 10 },
-    { id: 'takedown', name: '테이크다운', type: 'grapple', power: 22, speed: 68, stamina: 15 },
-    { id: 'knee', name: '무릎 차기', type: 'strike', power: 30, speed: 65, stamina: 12 },
-    { id: 'special', name: '필살기', type: 'special', power: 48, speed: 52, stamina: 25 },
+  웰라운더: [
+    { id: 'jab', label: '잽', sub: '빠름' },
+    { id: 'cross', label: '크로스', sub: '강함' },
+    { id: 'hook', label: '훅', sub: '묵직' },
+    { id: 'lowKick', label: '로우킥', sub: '다리' },
+    { id: 'takedown', label: '테이크다운', sub: '태클' },
+    { id: 'guard', label: '가드', sub: '방어' },
+    { id: 'evade', label: '회피', sub: '피하기' },
   ],
 }
 
-const getActions = (type) => {
-  if (type === '스트라이커') return ACTIONS.striker
-  if (type === '그래플러') return ACTIONS.grappler
-  return ACTIONS.wellarounder
+const MomentumBar = ({ value, color }) => (
+  <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+    <div
+      className={`h-full rounded-full transition-all duration-500 ${color}`}
+      style={{ width: `${value}%` }}
+    />
+  </div>
+)
+
+const HPBar = ({ hp, color }) => (
+  <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
+    <div
+      className={`h-full rounded-full transition-all duration-300 ${color}`}
+      style={{ width: `${Math.max(0, hp)}%` }}
+    />
+  </div>
+)
+
+// 파이터 스프라이트 컴포넌트
+const FighterSprite = ({ fighter, side, isHit, isAttacking, isGuarding, isEvading, isKO, isGroggy }) => {
+  const getStateClass = () => {
+    if (isKO) return 'opacity-30 translate-y-4'
+    if (isGroggy) return 'animate-bounce opacity-70'
+    if (isHit) return side === 'left' ? '-translate-x-2 opacity-80' : 'translate-x-2 opacity-80'
+    if (isAttacking) return side === 'left' ? 'translate-x-3' : '-translate-x-3'
+    if (isGuarding) return 'scale-95 opacity-90'
+    if (isEvading) return side === 'left' ? '-translate-x-3 opacity-70' : 'translate-x-3 opacity-70'
+    return ''
+  }
+
+  return (
+    <div className={`relative flex flex-col items-center transition-all duration-150 ${getStateClass()}`}>
+      {/* 선수 이미지 */}
+      <div className={`w-24 h-32 md:w-32 md:h-44 overflow-hidden rounded-lg ${side === 'right' ? 'scale-x-[-1]' : ''}`}>
+        <img
+          src={fighter.img}
+          alt={fighter.nickname}
+          className="w-full h-full object-cover object-top"
+          onError={e => {
+            e.target.style.display = 'none'
+            e.target.parentElement.classList.add('bg-gray-700')
+          }}
+        />
+      </div>
+
+      {/* 가드 이펙트 */}
+      {isGuarding && (
+        <div className="absolute inset-0 border-2 border-blue-400/60 rounded-lg bg-blue-400/10 flex items-center justify-center">
+          <span className="text-blue-400 font-black text-xs">GUARD</span>
+        </div>
+      )}
+
+      {/* 히트 이펙트 */}
+      {isHit && !isGuarding && (
+        <div className="absolute inset-0 bg-red-500/20 rounded-lg flex items-center justify-center">
+          <span className="text-red-400 font-black text-sm animate-ping">💥</span>
+        </div>
+      )}
+
+      {/* KO 이펙트 */}
+      {isKO && (
+        <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+          <span className="text-red-500 font-black text-lg">KO</span>
+        </div>
+      )}
+
+      {/* 이름 */}
+      <p className={`text-[10px] font-bold mt-1 ${side === 'left' ? 'text-yellow-400' : 'text-red-400'}`}>
+        {fighter.nickname}
+      </p>
+    </div>
+  )
 }
 
-const calcDamage = (action, attacker, defender) => {
-  const isStrike = action.type === 'strike' || action.type === 'special'
-  const attackStat = isStrike ? attacker.stats.sPower : attacker.stats.gPower
-  const defenseStat = isStrike ? defender.stats.sDefense : defender.stats.gDefense
-  const speedBonus = attacker.stats.sSpeed > defender.stats.sSpeed ? 1.1 : 0.9
-  const base = (action.power * attackStat) / 100
-  const reduction = (defenseStat / 200)
-  const damage = Math.max(5, Math.round(base * speedBonus * (1 - reduction) + Math.random() * 10 - 5))
-  return damage
+// 액션 배너
+const ActionBanner = ({ event }) => {
+  if (!event) return null
+  const isKO = event.type === 'ko'
+  const isCounter = event.isCounter
+  const isKnockdown = event.isKnockdown
+
+  return (
+    <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none text-center transition-all duration-200 ${
+      isKO ? 'scale-150' : isKnockdown ? 'scale-125' : 'scale-100'
+    }`}>
+      {isKO && <p className="text-red-500 font-black text-4xl drop-shadow-lg animate-pulse">KO!</p>}
+      {isKnockdown && !isKO && <p className="text-orange-400 font-black text-2xl drop-shadow-lg">KNOCKDOWN!</p>}
+      {isCounter && !isKO && !isKnockdown && <p className="text-cyan-400 font-black text-xl drop-shadow-lg">COUNTER!</p>}
+    </div>
+  )
 }
 
 export default function Fight() {
@@ -50,195 +135,306 @@ export default function Fight() {
   const [playerHP, setPlayerHP] = useState(100)
   const [opponentHP, setOpponentHP] = useState(100)
   const [playerStamina, setPlayerStamina] = useState(100)
+  const [playerMomentum, setPlayerMomentum] = useState(50)
+  const [opponentMomentum, setOpponentMomentum] = useState(50)
   const [round, setRound] = useState(1)
-  const [log, setLog] = useState(['🔔 1라운드 시작!'])
-  const [phase, setPhase] = useState('player_turn') // player_turn → enemy_turn → round_end → game_over
+  const [turnCount, setTurnCount] = useState(0)
+  const [log, setLog] = useState([{ text: '🔔 1라운드 시작!', id: 0 }])
+  const [phase, setPhase] = useState('player_turn')
   const [winner, setWinner] = useState(null)
-  const [selectedAction, setSelectedAction] = useState(null)
-  const [shaking, setShaking] = useState(null)
+  const [currentEvent, setCurrentEvent] = useState(null)
+  const [spriteState, setSpriteState] = useState({
+    playerAttacking: false, playerHit: false, playerGuarding: false, playerEvading: false, playerKO: false, playerGroggy: false,
+    opponentAttacking: false, opponentHit: false, opponentGuarding: false, opponentEvading: false, opponentKO: false, opponentGroggy: false,
+  })
+  const [screenShake, setScreenShake] = useState(false)
+  const [hitEffect, setHitEffect] = useState({ trigger: false, type: 'hit', side: 'right' })
+  const [showKOOverlay, setShowKOOverlay] = useState(false)
   const logRef = useRef(null)
+  const logIdRef = useRef(1)
 
-  const playerActions = getActions(player.type)
+  const buttons = ACTION_BUTTONS[player.type] || ACTION_BUTTONS['웰라운더']
 
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight)
   }, [log])
 
-  const addLog = (msg) => setLog(prev => [...prev, msg])
-
-  const shake = (target) => {
-    setShaking(target)
-    setTimeout(() => setShaking(null), 400)
+  const addLogs = (events) => {
+    const newLogs = events.map(e => ({ text: e.text, id: logIdRef.current++, type: e.type }))
+    setLog(prev => [...prev, ...newLogs].slice(-30))
   }
 
-  const handleAction = (action) => {
-    if (phase !== 'player_turn' || playerStamina < action.stamina) return
-    setSelectedAction(action.id)
+  const triggerSprite = (states, duration = 300) => {
+    setSpriteState(prev => ({ ...prev, ...states }))
+    setTimeout(() => setSpriteState(prev => {
+      const reset = {}
+      Object.keys(states).forEach(k => reset[k] = false)
+      return { ...prev, ...reset }
+    }), duration)
+  }
+
+  const triggerShake = () => {
+    setScreenShake(true)
+    setTimeout(() => setScreenShake(false), 400)
+  }
+
+  const triggerHitEffect = (type, side) => {
+    setHitEffect({ trigger: Date.now(), type, side })
+  }
+
+  const handleAction = (btnId) => {
+    if (phase !== 'player_turn') return
+    const move = MOVES[btnId]
+    if (!move || playerStamina < move.stamina) return
+
     setPhase('processing')
 
-    // 플레이어 공격
-    const dmg = calcDamage(action, player, opponent)
-    const newOppHP = Math.max(0, opponentHP - dmg)
-    setOpponentHP(newOppHP)
-    setPlayerStamina(prev => Math.max(0, prev - action.stamina))
-    shake('opponent')
+    const result = processTurn({
+      playerMove: move,
+      player, opponent,
+      playerHP, opponentHP,
+      playerStamina,
+      playerMomentum, opponentMomentum,
+      round,
+    })
 
-    const actionEmoji = action.type === 'grapple' ? '🤼' : action.type === 'special' ? '💥' : '🥊'
-    addLog(`${actionEmoji} 내가 ${action.name} → ${opponent.nickname}에게 ${dmg} 데미지!`)
-
-    // KO 체크
-    if (newOppHP <= 0) {
+    // 이벤트 순서대로 시각 처리
+    let delay = 0
+    result.events.forEach((event, i) => {
       setTimeout(() => {
-        addLog(`🏆 KO! ${player.nickname} 승리!`)
-        setWinner('player')
-        setPhase('game_over')
-      }, 600)
-      return
-    }
+        setCurrentEvent(event)
 
-    // AI 반격
+        if (event.attacker === 'player') {
+          if (event.type === 'attack') {
+            triggerSprite({ playerAttacking: true }, 200)
+            setTimeout(() => {
+              if (event.result === 'hit' || event.result === 'knockdown') {
+                triggerSprite({ opponentHit: true, opponentGroggy: event.isKnockdown }, 300)
+                if (event.damage > 25 || event.isKnockdown) triggerShake()
+                triggerHitEffect(event.isKnockdown ? 'knockdown' : event.isCounter ? 'counter' : 'hit', 'right')
+              }
+            }, 150)
+          } else if (event.type === 'defense') {
+            if (btnId === 'guard') triggerSprite({ playerGuarding: true }, 300)
+            if (btnId === 'evade') triggerSprite({ playerEvading: true }, 300)
+          }
+        } else if (event.attacker === 'opponent') {
+          if (event.type === 'attack') {
+            triggerSprite({ opponentAttacking: true }, 200)
+            setTimeout(() => {
+              if (event.result === 'hit' || event.result === 'knockdown') {
+                triggerSprite({ playerHit: true, playerGroggy: event.isKnockdown }, 300)
+                if (event.damage > 25 || event.isKnockdown) triggerShake()
+                triggerHitEffect(event.isKnockdown ? 'knockdown' : event.isCounter ? 'counter' : 'hit', 'left')
+              }
+              if (event.type === 'block') {
+                triggerHitEffect('block', 'left')
+              }
+              if (event.type === 'block') triggerSprite({ playerGuarding: true }, 200)
+            }, 150)
+          }
+        }
+
+        if (event.type === 'ko') {
+          if (event.attacker === 'player') triggerSprite({ opponentKO: true }, 5000)
+          else triggerSprite({ playerKO: true }, 5000)
+          setTimeout(() => setShowKOOverlay(true), 800)
+        }
+
+        setTimeout(() => setCurrentEvent(null), 800)
+      }, delay)
+      delay += 600
+    })
+
+    // 결과 반영
     setTimeout(() => {
-      const aiActions = getActions(opponent.type)
-      const aiAction = aiActions[Math.floor(Math.random() * (aiActions.length - 1))]
-      const aiDmg = calcDamage(aiAction, opponent, player)
-      const newPlayerHP = Math.max(0, playerHP - aiDmg)
-      setPlayerHP(newPlayerHP)
-      shake('player')
+      addLogs(result.events)
+      setPlayerHP(result.newPlayerHP)
+      setOpponentHP(result.newOpponentHP)
+      setPlayerStamina(result.newPlayerStamina)
+      setPlayerMomentum(result.newPlayerMomentum)
+      setOpponentMomentum(result.newOpponentMomentum)
 
-      const aiEmoji = aiAction.type === 'grapple' ? '🤼' : '🥊'
-      addLog(`${aiEmoji} ${opponent.nickname}의 ${aiAction.name} → 나에게 ${aiDmg} 데미지!`)
-
-      if (newPlayerHP <= 0) {
-        setTimeout(() => {
-          addLog(`💀 KO... ${opponent.nickname} 승리`)
-          setWinner('opponent')
-          setPhase('game_over')
-        }, 600)
+      if (result.isKO) {
+        const w = result.events.find(e => e.type === 'ko')?.attacker === 'player' ? 'player' : 'opponent'
+        setWinner(w)
+        setPhase('game_over')
         return
       }
 
-      // 라운드 종료 체크 (3라운드)
+      // 라운드 종료
       setTimeout(() => {
-        if (round >= 3) {
-          const pWin = playerHP > opponentHP
-          addLog(`⏱ 3라운드 종료! ${pWin ? player.nickname : opponent.nickname} 판정승!`)
+        const newTurnCount = turnCount + 1
+        setTurnCount(newTurnCount)
+        if (round >= 3 && newTurnCount >= 3) {
+          const pWin = result.newPlayerHP > result.newOpponentHP
           setWinner(pWin ? 'player' : 'opponent')
+          addLogs([{ text: `⏱ 3라운드 종료! ${pWin ? player.nickname : opponent.nickname} 판정승!`, type: 'round' }])
           setPhase('game_over')
-        } else {
+        } else if (newTurnCount >= 3) {
           setRound(r => r + 1)
-          setPlayerStamina(prev => Math.min(100, prev + 30))
-          addLog(`🔔 ${round + 1}라운드 시작!`)
+          setTurnCount(0)
+          setPlayerStamina(prev => Math.min(100, prev + 35))
+          addLogs([{ text: `🔔 ${round + 1}라운드 시작!`, type: 'round' }])
+          setPhase('player_turn')
+        } else {
           setPhase('player_turn')
         }
-        setSelectedAction(null)
-      }, 800)
-    }, 800)
+      }, result.events.length * 600 + 200)
+    }, result.events.length * 600)
   }
 
-  const HPBar = ({ hp, color, shakeTarget, target }) => (
-    <div className={`transition-all ${shaking === target ? 'translate-x-1' : ''}`}>
-      <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-300 ${color}`}
-          style={{ width: `${hp}%` }}
-        />
-      </div>
-      <p className="text-[10px] text-gray-500 mt-0.5">{hp} / 100</p>
-    </div>
-  )
+  const handleRematch = () => {
+    setPlayerHP(100); setOpponentHP(100)
+    setPlayerStamina(100)
+    setPlayerMomentum(50); setOpponentMomentum(50)
+    setRound(1)
+    setLog([{ text: '🔔 1라운드 시작!', id: 0 }])
+    setPhase('player_turn')
+    setWinner(null)
+    setSpriteState({
+      playerAttacking: false, playerHit: false, playerGuarding: false, playerEvading: false, playerKO: false, playerGroggy: false,
+      opponentAttacking: false, opponentHit: false, opponentGuarding: false, opponentEvading: false, opponentKO: false, opponentGroggy: false,
+    })
+  }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col max-w-lg mx-auto">
+    <div className={`min-h-screen bg-[#0a0a0a] text-white flex flex-col max-w-lg mx-auto transition-all ${screenShake ? 'animate-bounce' : ''}`}>
 
-      {/* 헤더 */}
-      <div className="bg-[#111] border-b border-yellow-500/20 px-4 py-3 flex items-center justify-between">
-        <button onClick={() => navigate('/')} className="text-gray-500 text-sm">← 뒤로</button>
-        <div className="text-center">
-          <p className="text-[10px] text-yellow-500 uppercase tracking-widest">Round</p>
-          <p className="text-xl font-black">{round} / 3</p>
+      {/* HUD 상단 */}
+      <div className="bg-[#111] border-b border-yellow-500/20 px-3 py-2">
+        <div className="flex items-center justify-between mb-2">
+          <button onClick={() => navigate('/')} className="text-gray-500 text-sm">← 뒤로</button>
+          <div className="text-center">
+            <p className="text-[9px] text-yellow-500 uppercase tracking-widest">Round</p>
+            <p className="text-lg font-black">{round} / 3</p>
+          </div>
+          <div className="w-8" />
         </div>
-        <div className="w-8" />
+
+        {/* HP 바 */}
+        <div className="flex gap-3 items-center">
+          <div className="flex-1">
+            <div className="flex justify-between mb-1">
+              <span className="text-[10px] text-yellow-400 font-bold">{player.nickname}</span>
+              <span className="text-[10px] text-gray-500">{playerHP}</span>
+            </div>
+            <HPBar hp={playerHP} color="bg-yellow-500" />
+            <MomentumBar value={playerMomentum} color="bg-yellow-400/50" />
+          </div>
+          <span className="text-yellow-500 font-black text-sm">VS</span>
+          <div className="flex-1">
+            <div className="flex justify-between mb-1">
+              <span className="text-[10px] text-gray-500">{opponentHP}</span>
+              <span className="text-[10px] text-red-400 font-bold">{opponent.nickname}</span>
+            </div>
+            <HPBar hp={opponentHP} color="bg-red-500" />
+            <MomentumBar value={opponentMomentum} color="bg-red-400/50" />
+          </div>
+        </div>
+
+        {/* 스태미나 */}
+        <div className="mt-1 flex items-center gap-2">
+          <span className="text-[9px] text-gray-600">스태미나</span>
+          <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+            <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${playerStamina}%` }} />
+          </div>
+          <span className="text-[9px] text-gray-600">{playerStamina}</span>
+        </div>
       </div>
 
-      {/* HP 바 영역 */}
-      <div className="px-4 py-4 bg-[#111] border-b border-gray-800">
-        <div className="flex gap-4">
-          {/* 플레이어 */}
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <img src={player.img} className="w-8 h-8 rounded-full object-cover object-top bg-gray-800" onError={e => e.target.style.display='none'} />
-              <div>
-                <p className="text-[11px] font-black text-yellow-400">{player.nickname}</p>
-                <p className="text-[9px] text-gray-500">{player.type}</p>
-              </div>
-            </div>
-            <HPBar hp={playerHP} color="bg-yellow-500" shakeTarget={shaking} target="player" />
-            <div className="mt-1">
-              <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-green-500 rounded-full transition-all" style={{width: `${playerStamina}%`}} />
-              </div>
-              <p className="text-[9px] text-gray-600">스태미나 {playerStamina}</p>
-            </div>
-          </div>
+      {/* 전투 씬 */}
+      <div className="relative bg-gradient-to-b from-[#1a0a0a] to-[#0a0a0a] border-b border-gray-800 overflow-hidden"
+        style={{ minHeight: '200px' }}>
 
-          <div className="text-yellow-500 font-black text-lg self-center">VS</div>
+        {/* 케이지 배경 */}
+        <div className="absolute inset-0 opacity-10"
+          style={{ backgroundImage: 'repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 40px), repeating-linear-gradient(90deg, #fff 0px, #fff 1px, transparent 1px, transparent 40px)' }} />
 
-          {/* 상대 */}
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1 justify-end">
-              <div className="text-right">
-                <p className="text-[11px] font-black text-red-400">{opponent.nickname}</p>
-                <p className="text-[9px] text-gray-500">{opponent.type}</p>
-              </div>
-              <img src={opponent.img} className="w-8 h-8 rounded-full object-cover object-top bg-gray-800" onError={e => e.target.style.display='none'} />
-            </div>
-            <HPBar hp={opponentHP} color="bg-red-500" shakeTarget={shaking} target="opponent" />
-          </div>
+        {/* 바닥 라인 */}
+        <div className="absolute bottom-8 left-0 right-0 h-0.5 bg-white/10" />
+
+        {/* 히트 이펙트 */}
+        <HitEffect trigger={hitEffect.trigger} type={hitEffect.type} side={hitEffect.side} />
+
+        {/* 파이터들 */}
+        <div className="relative flex items-end justify-between px-8 pb-6 pt-4 h-full">
+          <FighterSprite
+            fighter={player}
+            side="left"
+            isAttacking={spriteState.playerAttacking}
+            isHit={spriteState.playerHit}
+            isGuarding={spriteState.playerGuarding}
+            isEvading={spriteState.playerEvading}
+            isKO={spriteState.playerKO}
+            isGroggy={spriteState.playerGroggy}
+          />
+
+          {/* 중앙 액션 배너 */}
+          <ActionBanner event={currentEvent} />
+
+          <FighterSprite
+            fighter={opponent}
+            side="right"
+            isAttacking={spriteState.opponentAttacking}
+            isHit={spriteState.opponentHit}
+            isGuarding={spriteState.opponentGuarding}
+            isEvading={spriteState.opponentEvading}
+            isKO={spriteState.opponentKO}
+            isGroggy={spriteState.opponentGroggy}
+          />
         </div>
       </div>
 
       {/* 전투 로그 */}
-      <div ref={logRef} className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-1 min-h-[180px] max-h-[220px]">
-        {log.map((l, i) => (
-          <p key={i} className={`text-[12px] ${l.includes('KO') || l.includes('승리') ? 'text-yellow-400 font-bold' : l.includes('나에게') ? 'text-red-400' : 'text-gray-300'}`}>
-            {l}
-          </p>
+      <div ref={logRef} className="overflow-y-auto px-3 py-2 flex flex-col gap-0.5 bg-[#0d0d0d]" style={{ maxHeight: '100px' }}>
+        {log.slice(-8).map(l => (
+          <p key={l.id} className={`text-[11px] leading-relaxed ${
+            l.type === 'ko' ? 'text-yellow-400 font-bold' :
+            l.type === 'round' ? 'text-yellow-500/70' :
+            l.text?.includes('나에게') || l.text?.includes(opponent?.nickname) ? 'text-red-400' :
+            'text-gray-400'
+          }`}>{l.text}</p>
         ))}
       </div>
 
       {/* 액션 버튼 */}
       {phase !== 'game_over' && (
-        <div className="px-4 pb-6 pt-2 border-t border-gray-800">
-          <p className="text-[10px] text-gray-500 mb-2 text-center">
-            {phase === 'player_turn' ? '기술을 선택해줘' : '상대가 반격 중...'}
+        <div className="px-3 py-3 border-t border-gray-800 bg-[#111]">
+          <p className="text-[9px] text-gray-600 mb-2 text-center">
+            {phase === 'player_turn' ? '기술 선택' : '처리 중...'}
           </p>
-          <div className="grid grid-cols-3 gap-2">
-            {playerActions.map(action => (
-              <button
-                key={action.id}
-                onClick={() => handleAction(action)}
-                disabled={phase !== 'player_turn' || playerStamina < action.stamina}
-                className={`py-3 px-2 rounded-xl border text-center transition-all ${
-                  action.type === 'special'
-                    ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-400'
-                    : action.type === 'grapple'
-                    ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
-                    : 'border-gray-700 bg-[#1a1a1a] text-white'
-                } disabled:opacity-30`}
-              >
-                <p className="text-[12px] font-bold">{action.name}</p>
-                <p className="text-[9px] text-gray-500 mt-0.5">파워 {action.power}</p>
-                <p className="text-[9px] text-gray-600">스태 -{action.stamina}</p>
-              </button>
-            ))}
+          <div className="grid grid-cols-4 gap-1.5">
+            {buttons.map(btn => {
+              const move = MOVES[btn.id]
+              const notEnoughStamina = playerStamina < (move?.stamina || 0)
+              return (
+                <button
+                  key={btn.id}
+                  onClick={() => handleAction(btn.id)}
+                  disabled={phase !== 'player_turn' || notEnoughStamina}
+                  className={`py-2 px-1 rounded-lg border text-center transition-all disabled:opacity-30 ${
+                    btn.id === 'guard' || btn.id === 'evade'
+                      ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+                      : move?.type === 'grapple'
+                      ? 'border-purple-500/30 bg-purple-500/10 text-purple-300'
+                      : 'border-gray-700 bg-[#1a1a1a] text-white'
+                  }`}
+                >
+                  <p className="text-[11px] font-bold">{btn.label}</p>
+                  <p className="text-[8px] text-gray-500">{btn.sub}</p>
+                  <p className="text-[8px] text-gray-600">-{move?.stamina}</p>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
 
       {/* 게임 오버 */}
       {phase === 'game_over' && (
-        <div className="px-4 pb-8 pt-4 border-t border-gray-800 text-center">
-          <p className="text-3xl mb-2">{winner === 'player' ? '🏆' : '💀'}</p>
+        <div className="px-4 py-6 border-t border-gray-800 text-center bg-[#111]">
+          <p className="text-4xl mb-2">{winner === 'player' ? '🏆' : '💀'}</p>
           <p className="text-xl font-black mb-1">
             {winner === 'player' ? `${player.nickname} 승리!` : `${opponent.nickname} 승리`}
           </p>
@@ -246,21 +442,28 @@ export default function Fight() {
             {winner === 'player' ? '완벽한 경기였어!' : '다음엔 이길 수 있어!'}
           </p>
           <div className="flex gap-3">
-            <button
-              onClick={() => { setPlayerHP(100); setOpponentHP(100); setPlayerStamina(100); setRound(1); setLog(['🔔 1라운드 시작!']); setPhase('player_turn'); setWinner(null) }}
-              className="flex-1 py-3 border border-gray-700 rounded-xl text-gray-300 font-bold text-sm"
-            >
+            <button onClick={handleRematch} className="flex-1 py-3 border border-gray-700 rounded-xl text-gray-300 font-bold text-sm">
               다시 대결
             </button>
-            <button
-              onClick={() => navigate('/')}
-              className="flex-1 py-3 bg-yellow-500 text-black rounded-xl font-black text-sm"
-            >
+            <button onClick={() => navigate('/')} className="flex-1 py-3 bg-yellow-500 text-black rounded-xl font-black text-sm">
               파이터 변경
             </button>
           </div>
         </div>
       )}
+    {/* KO 오버레이 */}
+      <KOOverlay
+        isVisible={showKOOverlay}
+        winner={winner === 'player' ? player : opponent}
+        loser={winner === 'player' ? opponent : player}
+        round={round}
+        onClose={(action) => {
+          setShowKOOverlay(false)
+          if (action === 'rematch') handleRematch()
+          else navigate('/')
+        }}
+      />
+
     </div>
   )
 }

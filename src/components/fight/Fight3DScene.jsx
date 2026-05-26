@@ -108,7 +108,7 @@ function Fighter({ side, currentState, position }) {
       ref={groupRef}
       position={position}
       rotation={[0, side === 'right' ? Math.PI : 0, 0]}
-      scale={[0.01, 0.01, 0.01]}
+      scale={[0.018, 0.018, 0.018]}
     >
       <primitive object={clonedScene} />
     </group>
@@ -152,7 +152,7 @@ export default function Fight3DScene({ playerState, opponentState }) {
     <div style={{ width: '100%', height: '280px', background: '#0a0a0a' }}>
       <Canvas
         shadows
-        camera={{ position: [0, 1.5, 4], fov: 60 }}
+        camera={{ position: [0, 1, 3], fov: 75 }}
         gl={{
           antialias: true,
           powerPreference: 'default',

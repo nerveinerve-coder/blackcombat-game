@@ -1,5 +1,5 @@
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, ContactShadows } from '@react-three/drei'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { useGLTF } from '@react-three/drei'
 import { useEffect, useRef, Suspense, useMemo } from 'react'
 import * as THREE from 'three'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -11,12 +11,9 @@ const ANIM_MAP = {
   victory: 'victory', guard: 'idle', evade: 'idle',
 }
 
-// 두 파이터를 하나의 컴포넌트에서 관리
 function Fighters({ playerState, opponentState }) {
   const { scene, animations } = useGLTF('/fighter.glb')
 
-  const leftRef = useRef()
-  const rightRef = useRef()
   const leftMixer = useRef()
   const rightMixer = useRef()
   const leftActions = useRef({})
@@ -44,14 +41,13 @@ function Fighters({ playerState, opponentState }) {
     rightMixer.current = new THREE.AnimationMixer(rightScene)
     initFighter(leftScene, leftMixer, leftActions, leftCurrent)
     initFighter(rightScene, rightMixer, rightActions, rightCurrent)
-
     return () => {
       leftMixer.current?.stopAllAction()
       rightMixer.current?.stopAllAction()
     }
-  }, [leftScene, rightScene, animations])
+  }, [leftScene, rightScene])
 
-  const switchAnim = (state, actions, current, mixer) => {
+  const switchAnim = (state, actions, current) => {
     const animName = ANIM_MAP[state] || 'idle'
     const next = actions.current[animName]
     if (!next || next === current.current) return
@@ -67,13 +63,8 @@ function Fighters({ playerState, opponentState }) {
     current.current = next
   }
 
-  useEffect(() => {
-    switchAnim(playerState, leftActions, leftCurrent, leftMixer)
-  }, [playerState])
-
-  useEffect(() => {
-    switchAnim(opponentState, rightActions, rightCurrent, rightMixer)
-  }, [opponentState])
+  useEffect(() => { switchAnim(playerState, leftActions, leftCurrent) }, [playerState])
+  useEffect(() => { switchAnim(opponentState, rightActions, rightCurrent) }, [opponentState])
 
   useFrame((_, delta) => {
     leftMixer.current?.update(delta)
@@ -82,40 +73,33 @@ function Fighters({ playerState, opponentState }) {
 
   return (
     <>
-      <group ref={leftRef} position={[-1.2, 0, 0]} scale={[0.018, 0.018, 0.018]}>
+      <group position={[-1.2, 0, 0]} scale={[0.018, 0.018, 0.018]}>
         <primitive object={leftScene} />
       </group>
-      <group ref={rightRef} position={[1.2, 0, 0]} rotation={[0, Math.PI, 0]} scale={[0.018, 0.018, 0.018]}>
+      <group position={[1.2, 0, 0]} rotation={[0, Math.PI, 0]} scale={[0.018, 0.018, 0.018]}>
         <primitive object={rightScene} />
       </group>
     </>
   )
 }
 
-function CageArena() {
+function Floor() {
   return (
-    <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[12, 8]} />
-        <meshStandardMaterial color="#1a1209" roughness={0.9} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-        <ringGeometry args={[1.8, 2.0, 64]} />
-        <meshStandardMaterial color="#ffffff" opacity={0.08} transparent />
-      </mesh>
-      <ContactShadows position={[0, 0.01, 0]} opacity={0.5} scale={10} blur={2} far={4} />
-    </group>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+      <planeGeometry args={[12, 8]} />
+      <meshStandardMaterial color="#1a1209" roughness={1} metalness={0} />
+    </mesh>
   )
 }
 
 function Scene({ playerState, opponentState }) {
   return (
     <>
-      <ambientLight intensity={0.5} />
-      <spotLight position={[0, 8, 2]} intensity={2} angle={0.5} penumbra={0.5} castShadow />
-      <pointLight position={[-3, 3, 2]} intensity={0.6} color="#ffaa44" />
-      <pointLight position={[3, 3, 2]} intensity={0.6} color="#4488ff" />
-      <CageArena />
+      <ambientLight intensity={0.8} />
+      <directionalLight position={[0, 5, 3]} intensity={1.5} />
+      <pointLight position={[-3, 3, 2]} intensity={0.5} color="#ffaa44" />
+      <pointLight position={[3, 3, 2]} intensity={0.5} color="#4488ff" />
+      <Floor />
       <Fighters playerState={playerState} opponentState={opponentState} />
     </>
   )
@@ -125,13 +109,8 @@ export default function Fight3DScene({ playerState, opponentState }) {
   return (
     <div style={{ width: '100%', height: '280px', background: '#0a0a0a' }}>
       <Canvas
-        shadows
         camera={{ position: [0, 1.2, 3.5], fov: 65 }}
-        gl={{
-          antialias: true,
-          powerPreference: 'default',
-          failIfMajorPerformanceCaveat: false,
-        }}
+        gl={{ antialias: true, powerPreference: 'default' }}
         dpr={[1, 1]}
       >
         <Suspense fallback={null}>

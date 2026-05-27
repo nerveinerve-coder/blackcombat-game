@@ -71,12 +71,12 @@ const gltfPromise = new Promise((resolve) => {
 
 export default function Fight3DScene({ playerState, opponentState, playerType = 'W', opponentType = 'W', lastEvent, playerData, opponentData }) {
   const mountRef = useRef()
-  const stateRef = useRef({ playerState, opponentState, playerType, opponentType, lastEvent })
+  const stateRef = useRef({ playerState, opponentState, playerType, opponentType, lastEvent, playerData, opponentData })
   const renderRef = useRef({ ready: false })
   const fightersRef = useRef({})
 
   useEffect(() => {
-    stateRef.current = { playerState, opponentState, playerType, opponentType, lastEvent }
+    stateRef.current = { playerState, opponentState, playerType, opponentType, lastEvent, playerData, opponentData }
   }, [playerState, opponentState, playerType, opponentType, lastEvent])
 
   useEffect(() => {
@@ -140,7 +140,11 @@ export default function Fight3DScene({ playerState, opponentState, playerType = 
 
       const group = new THREE.Group()
       group.add(cloned)
-      group.scale.set(120, 120, 120)
+      // 키에 따른 스케일 (170cm 기준)
+      const fighterData = side === 'left' ? stateRef.current.playerData : stateRef.current.opponentData
+      const height = fighterData?.height || 170
+      const scale = 120 * (height / 170)
+      group.scale.set(scale, scale, scale)
       group.position.x = side === 'left' ? -120 : 120
       group.position.y = -120
       // 서로 마주보게

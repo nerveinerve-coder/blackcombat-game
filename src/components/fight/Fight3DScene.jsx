@@ -154,8 +154,17 @@ export default function Fight3DScene({ playerState, opponentState, playerType = 
       // 키에 따른 스케일 (170cm 기준)
       const fighterData = side === 'left' ? stateRef.current.playerData : stateRef.current.opponentData
       const height = fighterData?.height || 170
-      const scale = 120 * (height / 170)
-      group.scale.set(scale, scale, scale)
+      const weightClass = fighterData?.weightClass || '라이트급'
+      const weightMap = {
+        '여성 아톰급': 52, '플라이급': 57, '밴텀급': 61,
+        '페더급': 66, '라이트급': 70, '웰터급': 77,
+        '미들급': 84, '헤비급': 120,
+      }
+      const weight = weightMap[weightClass] || 70
+      const bmi = weight / ((height / 100) ** 2)
+      const baseScale = 120 * (height / 170)
+      const widthScale = baseScale * (0.85 + (bmi - 18) / 80)
+      group.scale.set(widthScale, baseScale, widthScale)
       group.position.x = side === 'left' ? -120 : 120
       group.position.y = -120
       // 서로 마주보게

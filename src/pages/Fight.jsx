@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MOVES, TYPE_MOVES } from '../game/moves.js'
-import { processTurn, selectAIMove } from '../game/matchEngine.js'
+import { MOVES } from '../game/moves.js'
+import { processTurn } from '../game/matchEngine.js'
 import HitEffect from '../components/fight/HitEffect.jsx'
 import KOOverlay from '../components/fight/KOOverlay.jsx'
+import Fight3DScene from '../components/fight/Fight3DScene.jsx'
 
 const ACTION_BUTTONS = {
   스트라이커: [
@@ -12,6 +13,8 @@ const ACTION_BUTTONS = {
     { id: 'hook', label: '훅', sub: '묵직' },
     { id: 'lowKick', label: '로우킥', sub: '다리' },
     { id: 'highKick', label: '하이킥', sub: 'KO' },
+    { id: 'elbow', label: '엘보우', sub: '스페셜', special: true },
+    { id: 'elbowUpper', label: '어퍼 엘보우', sub: '스페셜', special: true },
     { id: 'guard', label: '가드', sub: '방어' },
     { id: 'evade', label: '회피', sub: '피하기' },
   ],
@@ -21,6 +24,9 @@ const ACTION_BUTTONS = {
     { id: 'takedown', label: '테이크다운', sub: '태클' },
     { id: 'clinch', label: '클린치', sub: '잡기' },
     { id: 'submission', label: '서브미션', sub: '관절기' },
+    { id: 'takedownSpecial', label: '스페셜 테이크다운', sub: '스페셜', special: true },
+    { id: 'armbar', label: '암바', sub: '스페셜', special: true },
+    { id: 'rearNakedChoke', label: 'RNC', sub: '스페셜', special: true },
     { id: 'guard', label: '가드', sub: '방어' },
     { id: 'evade', label: '회피', sub: '피하기' },
   ],
@@ -30,6 +36,8 @@ const ACTION_BUTTONS = {
     { id: 'hook', label: '훅', sub: '묵직' },
     { id: 'lowKick', label: '로우킥', sub: '다리' },
     { id: 'takedown', label: '테이크다운', sub: '태클' },
+    { id: 'kneeKick', label: '니킥', sub: '스페셜', special: true },
+    { id: 'clinch', label: '클린치', sub: '잡기' },
     { id: 'guard', label: '가드', sub: '방어' },
     { id: 'evade', label: '회피', sub: '피하기' },
   ],
@@ -37,92 +45,23 @@ const ACTION_BUTTONS = {
 
 const MomentumBar = ({ value, color }) => (
   <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-    <div
-      className={`h-full rounded-full transition-all duration-500 ${color}`}
-      style={{ width: `${value}%` }}
-    />
+    <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${value}%` }} />
   </div>
 )
 
 const HPBar = ({ hp, color }) => (
   <div className="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
-    <div
-      className={`h-full rounded-full transition-all duration-300 ${color}`}
-      style={{ width: `${Math.max(0, hp)}%` }}
-    />
+    <div className={`h-full rounded-full transition-all duration-300 ${color}`} style={{ width: `${Math.max(0, hp)}%` }} />
   </div>
 )
 
-// 파이터 스프라이트 컴포넌트
-const FighterSprite = ({ fighter, side, isHit, isAttacking, isGuarding, isEvading, isKO, isGroggy }) => {
-  const getStateClass = () => {
-    if (isKO) return 'opacity-30 translate-y-4'
-    if (isGroggy) return 'animate-bounce opacity-70'
-    if (isHit) return side === 'left' ? '-translate-x-2 opacity-80' : 'translate-x-2 opacity-80'
-    if (isAttacking) return side === 'left' ? 'translate-x-3' : '-translate-x-3'
-    if (isGuarding) return 'scale-95 opacity-90'
-    if (isEvading) return side === 'left' ? '-translate-x-3 opacity-70' : 'translate-x-3 opacity-70'
-    return ''
-  }
-
-  return (
-    <div className={`relative flex flex-col items-center transition-all duration-150 ${getStateClass()}`}>
-      {/* 선수 이미지 */}
-      <div className={`w-24 h-32 md:w-32 md:h-44 overflow-hidden rounded-lg ${side === 'right' ? 'scale-x-[-1]' : ''}`}>
-        <img
-          src={fighter.img}
-          alt={fighter.nickname}
-          className="w-full h-full object-cover object-top"
-          onError={e => {
-            e.target.style.display = 'none'
-            e.target.parentElement.classList.add('bg-gray-700')
-          }}
-        />
-      </div>
-
-      {/* 가드 이펙트 */}
-      {isGuarding && (
-        <div className="absolute inset-0 border-2 border-blue-400/60 rounded-lg bg-blue-400/10 flex items-center justify-center">
-          <span className="text-blue-400 font-black text-xs">GUARD</span>
-        </div>
-      )}
-
-      {/* 히트 이펙트 */}
-      {isHit && !isGuarding && (
-        <div className="absolute inset-0 bg-red-500/20 rounded-lg flex items-center justify-center">
-          <span className="text-red-400 font-black text-sm animate-ping">💥</span>
-        </div>
-      )}
-
-      {/* KO 이펙트 */}
-      {isKO && (
-        <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
-          <span className="text-red-500 font-black text-lg">KO</span>
-        </div>
-      )}
-
-      {/* 이름 */}
-      <p className={`text-[10px] font-bold mt-1 ${side === 'left' ? 'text-yellow-400' : 'text-red-400'}`}>
-        {fighter.nickname}
-      </p>
-    </div>
-  )
-}
-
-// 액션 배너
 const ActionBanner = ({ event }) => {
   if (!event) return null
-  const isKO = event.type === 'ko'
-  const isCounter = event.isCounter
-  const isKnockdown = event.isKnockdown
-
   return (
-    <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none text-center transition-all duration-200 ${
-      isKO ? 'scale-150' : isKnockdown ? 'scale-125' : 'scale-100'
-    }`}>
-      {isKO && <p className="text-red-500 font-black text-4xl drop-shadow-lg animate-pulse">KO!</p>}
-      {isKnockdown && !isKO && <p className="text-orange-400 font-black text-2xl drop-shadow-lg">KNOCKDOWN!</p>}
-      {isCounter && !isKO && !isKnockdown && <p className="text-cyan-400 font-black text-xl drop-shadow-lg">COUNTER!</p>}
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none text-center">
+      {event.type === 'ko' && <p className="text-red-500 font-black text-4xl drop-shadow-lg animate-pulse">KO!</p>}
+      {event.isKnockdown && event.type !== 'ko' && <p className="text-orange-400 font-black text-2xl drop-shadow-lg">KNOCKDOWN!</p>}
+      {event.isCounter && event.type !== 'ko' && !event.isKnockdown && <p className="text-cyan-400 font-black text-xl drop-shadow-lg">COUNTER!</p>}
     </div>
   )
 }
@@ -150,10 +89,22 @@ export default function Fight() {
   const [screenShake, setScreenShake] = useState(false)
   const [hitEffect, setHitEffect] = useState({ trigger: false, type: 'hit', side: 'right' })
   const [showKOOverlay, setShowKOOverlay] = useState(false)
+  const [playerKnockdowns, setPlayerKnockdowns] = useState(0)
+  const [opponentKnockdowns, setOpponentKnockdowns] = useState(0)
   const logRef = useRef(null)
   const logIdRef = useRef(1)
 
-  const buttons = ACTION_BUTTONS[player.type] || ACTION_BUTTONS['웰라운더']
+  const typeMap = { 'G': '그래플러', 'S': '스트라이커', 'W': '웰라운더' }
+  const playerTypeName = typeMap[player.type] || player.type
+  const baseButtons = ACTION_BUTTONS[playerTypeName] || ACTION_BUTTONS['웰라운더']
+
+  // 바이퍼 전용 스페셜 기술 추가
+  const viperButtons = player.id === 'viper' ? [
+  { id: 'comboJabElbow', label: '잽 엘보우 콤보', sub: '바이퍼 전용', special: true },
+  { id: 'comboElbowUppercut', label: '엘보우 어퍼컷', sub: '바이퍼 전용', special: true },
+  ] : []
+
+  const buttons = [...baseButtons.filter(b => b.id !== 'guard' && b.id !== 'evade'), ...viperButtons, ...baseButtons.filter(b => b.id === 'guard' || b.id === 'evade')]
 
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight)
@@ -196,14 +147,14 @@ export default function Fight() {
       playerStamina,
       playerMomentum, opponentMomentum,
       round,
+      playerKnockdowns,
+      opponentKnockdowns,
     })
 
-    // 이벤트 순서대로 시각 처리
     let delay = 0
-    result.events.forEach((event, i) => {
+    result.events.forEach((event) => {
       setTimeout(() => {
         setCurrentEvent(event)
-
         if (event.attacker === 'player') {
           if (event.type === 'attack') {
             triggerSprite({ playerAttacking: true }, 200)
@@ -227,26 +178,20 @@ export default function Fight() {
                 if (event.damage > 25 || event.isKnockdown) triggerShake()
                 triggerHitEffect(event.isKnockdown ? 'knockdown' : event.isCounter ? 'counter' : 'hit', 'left')
               }
-              if (event.type === 'block') {
-                triggerHitEffect('block', 'left')
-              }
               if (event.type === 'block') triggerSprite({ playerGuarding: true }, 200)
             }, 150)
           }
         }
-
         if (event.type === 'ko') {
           if (event.attacker === 'player') triggerSprite({ opponentKO: true }, 5000)
           else triggerSprite({ playerKO: true }, 5000)
           setTimeout(() => setShowKOOverlay(true), 800)
         }
-
         setTimeout(() => setCurrentEvent(null), 800)
       }, delay)
       delay += 600
     })
 
-    // 결과 반영
     setTimeout(() => {
       addLogs(result.events)
       setPlayerHP(result.newPlayerHP)
@@ -254,6 +199,8 @@ export default function Fight() {
       setPlayerStamina(result.newPlayerStamina)
       setPlayerMomentum(result.newPlayerMomentum)
       setOpponentMomentum(result.newOpponentMomentum)
+      setPlayerKnockdowns(result.newPlayerKnockdowns)
+      setOpponentKnockdowns(result.newOpponentKnockdowns)
 
       if (result.isKO) {
         const w = result.events.find(e => e.type === 'ko')?.attacker === 'player' ? 'player' : 'opponent'
@@ -262,7 +209,6 @@ export default function Fight() {
         return
       }
 
-      // 라운드 종료
       setTimeout(() => {
         const newTurnCount = turnCount + 1
         setTurnCount(newTurnCount)
@@ -288,15 +234,20 @@ export default function Fight() {
     setPlayerHP(100); setOpponentHP(100)
     setPlayerStamina(100)
     setPlayerMomentum(50); setOpponentMomentum(50)
-    setRound(1)
+    setRound(1); setTurnCount(0)
+    setPlayerKnockdowns(0); setOpponentKnockdowns(0)
     setLog([{ text: '🔔 1라운드 시작!', id: 0 }])
     setPhase('player_turn')
     setWinner(null)
+    setShowKOOverlay(false)
     setSpriteState({
       playerAttacking: false, playerHit: false, playerGuarding: false, playerEvading: false, playerKO: false, playerGroggy: false,
       opponentAttacking: false, opponentHit: false, opponentGuarding: false, opponentEvading: false, opponentKO: false, opponentGroggy: false,
     })
   }
+
+  const playerState3D = spriteState.playerKO ? 'ko' : spriteState.playerGroggy ? 'groggy' : spriteState.playerHit ? 'hit' : spriteState.playerGuarding ? 'guard' : spriteState.playerEvading ? 'evade' : spriteState.playerAttacking ? 'attack' : 'idle'
+  const opponentState3D = spriteState.opponentKO ? 'ko' : spriteState.opponentGroggy ? 'groggy' : spriteState.opponentHit ? 'hit' : spriteState.opponentGuarding ? 'guard' : spriteState.opponentEvading ? 'evade' : spriteState.opponentAttacking ? 'attack' : 'idle'
 
   return (
     <div className={`min-h-screen bg-[#0a0a0a] text-white flex flex-col max-w-lg mx-auto transition-all ${screenShake ? 'animate-bounce' : ''}`}>
@@ -311,8 +262,6 @@ export default function Fight() {
           </div>
           <div className="w-8" />
         </div>
-
-        {/* HP 바 */}
         <div className="flex gap-3 items-center">
           <div className="flex-1">
             <div className="flex justify-between mb-1">
@@ -332,8 +281,6 @@ export default function Fight() {
             <MomentumBar value={opponentMomentum} color="bg-red-400/50" />
           </div>
         </div>
-
-        {/* 스태미나 */}
         <div className="mt-1 flex items-center gap-2">
           <span className="text-[9px] text-gray-600">스태미나</span>
           <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
@@ -343,46 +290,20 @@ export default function Fight() {
         </div>
       </div>
 
-      {/* 전투 씬 */}
-      <div className="relative bg-gradient-to-b from-[#1a0a0a] to-[#0a0a0a] border-b border-gray-800 overflow-hidden"
-        style={{ minHeight: '200px' }}>
-
-        {/* 케이지 배경 */}
-        <div className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'repeating-linear-gradient(0deg, #fff 0px, #fff 1px, transparent 1px, transparent 40px), repeating-linear-gradient(90deg, #fff 0px, #fff 1px, transparent 1px, transparent 40px)' }} />
-
-        {/* 바닥 라인 */}
-        <div className="absolute bottom-8 left-0 right-0 h-0.5 bg-white/10" />
-
-        {/* 히트 이펙트 */}
-        <HitEffect trigger={hitEffect.trigger} type={hitEffect.type} side={hitEffect.side} />
-
-        {/* 파이터들 */}
-        <div className="relative flex items-end justify-between px-8 pb-6 pt-4 h-full">
-          <FighterSprite
-            fighter={player}
-            side="left"
-            isAttacking={spriteState.playerAttacking}
-            isHit={spriteState.playerHit}
-            isGuarding={spriteState.playerGuarding}
-            isEvading={spriteState.playerEvading}
-            isKO={spriteState.playerKO}
-            isGroggy={spriteState.playerGroggy}
-          />
-
-          {/* 중앙 액션 배너 */}
+      {/* 3D 전투 씬 */}
+      <div className="relative border-b border-gray-800 overflow-hidden">
+        <Fight3DScene
+          playerState={playerState3D}
+          opponentState={opponentState3D}
+          playerType={player.type}
+          opponentType={opponent.type}
+          lastEvent={currentEvent}
+          playerData={player}
+          opponentData={opponent}
+        />
+        <div className="absolute inset-0 pointer-events-none">
+          <HitEffect trigger={hitEffect.trigger} type={hitEffect.type} side={hitEffect.side} />
           <ActionBanner event={currentEvent} />
-
-          <FighterSprite
-            fighter={opponent}
-            side="right"
-            isAttacking={spriteState.opponentAttacking}
-            isHit={spriteState.opponentHit}
-            isGuarding={spriteState.opponentGuarding}
-            isEvading={spriteState.opponentEvading}
-            isKO={spriteState.opponentKO}
-            isGroggy={spriteState.opponentGroggy}
-          />
         </div>
       </div>
 
@@ -416,6 +337,8 @@ export default function Fight() {
                   className={`py-2 px-1 rounded-lg border text-center transition-all disabled:opacity-30 ${
                     btn.id === 'guard' || btn.id === 'evade'
                       ? 'border-blue-500/30 bg-blue-500/10 text-blue-300'
+                      : btn.special
+                      ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-300'
                       : move?.type === 'grapple'
                       ? 'border-purple-500/30 bg-purple-500/10 text-purple-300'
                       : 'border-gray-700 bg-[#1a1a1a] text-white'
@@ -451,7 +374,7 @@ export default function Fight() {
           </div>
         </div>
       )}
-    {/* KO 오버레이 */}
+
       <KOOverlay
         isVisible={showKOOverlay}
         winner={winner === 'player' ? player : opponent}
@@ -463,7 +386,6 @@ export default function Fight() {
           else navigate('/')
         }}
       />
-
     </div>
   )
 }

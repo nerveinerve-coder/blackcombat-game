@@ -2,19 +2,55 @@ const B = 'https://www.blackcombat-official.com/theme/blackcombat/img/fighter_ne
 
 const makeStats = (type, rank) => {
   const base = rank === 'CHAMP' ? 88 : rank === '1위' ? 84 : rank === '2위' ? 81 : rank === '3위' ? 78 : rank === '4위' ? 75 : rank === '5위' ? 73 : rank === '6위' ? 71 : rank === '7위' ? 69 : rank === '8위' ? 67 : rank === '9위' ? 65 : 62
-  if (type === 'G') return { gPower: base+4, gDefense: base+2, gSpeed: base-2, sPower: base-14, sDefense: base-10, sSpeed: base-12 }
-  if (type === 'S') return { gPower: base-14, gDefense: base-10, gSpeed: base-12, sPower: base+4, sDefense: base+2, sSpeed: base+2 }
-  return { gPower: base-4, gDefense: base-2, gSpeed: base-4, sPower: base-4, sDefense: base-2, sSpeed: base-2 }
+  if (type === 'G') return {
+    gPower: base+4, gDefense: base+2, gSpeed: base-2,
+    sPower: base-14, sDefense: base-10, sSpeed: base-12,
+    chin: base+2, stamina: base+4,
+  }
+  if (type === 'S') return {
+    gPower: base-14, gDefense: base-10, gSpeed: base-12,
+    sPower: base+4, sDefense: base+2, sSpeed: base+2,
+    chin: base-2, stamina: base,
+  }
+  return {
+    gPower: base-4, gDefense: base-2, gSpeed: base-4,
+    sPower: base-4, sDefense: base-2, sSpeed: base-2,
+    chin: base, stamina: base+2,
+  }
 }
 
 const specials = {
-  G: ['암바', '리어 네이키드 초크', '테이크다운'],
-  S: ['파워 크로스', '하이킥', '잽 콤보'],
-  W: ['클린치 무릎', '테이크다운', '크로스'],
+  G: ['takedownSpecial', 'armbar', 'rearNakedChoke'],
+  S: ['elbow', 'elbowUpper', 'highKick'],
+  W: ['kneeKick', 'clinch', 'lowKick'],
 }
 
-const f = (id, nickname, name, record, rank, type, seq, ext = 'webp', isChamp = false) => ({
-  id, nickname, name, record, rank, type,
+export const WEIGHT_CLASS_ORDER = ['플라이급', '밴텀급', '페더급', '라이트급', '웰터급', '미들급', '헤비급']
+
+export const getWeightDiff = (fighter1, fighter2) => {
+  const idx1 = WEIGHT_CLASS_ORDER.indexOf(fighter1.weightClass)
+  const idx2 = WEIGHT_CLASS_ORDER.indexOf(fighter2.weightClass)
+  return idx2 - idx1 // 양수면 fighter2가 더 무거운 체급
+}
+
+export const applyWeightBonus = (fighter, opponent) => {
+  const diff = WEIGHT_CLASS_ORDER.indexOf(fighter.weightClass) - WEIGHT_CLASS_ORDER.indexOf(opponent.weightClass)
+  const stats = { ...fighter.stats }
+  if (diff > 0) {
+    // 더 무거운 체급 → 파워+5, 맷집+5 per 단계
+    stats.sPower += diff * 5
+    stats.gPower += diff * 5
+    stats.chin += diff * 5
+  } else if (diff < 0) {
+    // 더 가벼운 체급 → 스피드+5 per 단계
+    stats.sSpeed += Math.abs(diff) * 5
+    stats.gSpeed += Math.abs(diff) * 5
+  }
+  return { ...fighter, stats }
+}
+
+const f = (id, nickname, name, record, rank, type, seq, ext = 'webp', isChamp = false, weightClass = '') => ({
+  id, nickname, name, record, rank, type, weightClass,
   img: `${B}/${seq}/${seq}_${isChamp ? 'rankingChamp' : 'ranking'}.${ext}`,
   stats: makeStats(type, rank),
   specials: specials[type],
@@ -22,7 +58,7 @@ const f = (id, nickname, name, record, rank, type, seq, ext = 'webp', isChamp = 
 
 export const FIGHTERS = {
   플라이급: [
-    f('tank', '탱크', '코마키네 타카히로', '19-5-0', 'CHAMP', 'G', '71657127', 'webp', true),
+    f('tank', '탱크', '코마키네 타카히로', '19-5-0', 'CHAMP', 'G', '71657127', 'webp', true, '플라이급'),
     f('indianking', '인디언킹', 'Gabriel Rodrigues', '7-1-0', '1위', 'W', '86478580'),
     f('umawang', '우마왕', '우성훈', '12-4-0', '2위', 'S', '73873103'),
     f('yunbanggwan', '윤방관', '윤호영', '7-5-1', '3위', 'S', '70398446'),
@@ -30,7 +66,7 @@ export const FIGHTERS = {
     f('kimgwanjang', '김관장', '김성재', '9-10-1', '5위', 'S', '77552285'),
     f('viper', '바이퍼', '김성웅', '8-8-0', '6위', 'W', '31367195'),
     f('anchovy', '앤쵸비', '박태호', '9-7-0', '7위', 'S', '92865695'),
-    f('amazonkid', '아마존 키드', 'Thomas Assis', '12-4-0', '8위', 'W', '31720294', 'png'),
+    f('amazonkid', '아마존 키드', 'Thomas Assis', '12-4-0', '8위', 'W', '31720294', 'png', false, '플라이급'),
     f('tugyeon', '투견', '정원희', '9-9-0', '9위', 'S', '27904723'),
     f('boogyman', '부기맨', 'Rangel dos Santos', '12-6-1', '10위', 'S', '71736058'),
     f('sniper', 'Sniper', 'Isiah Torres', '9-4-1', '랭커', 'S', '92748764'),
@@ -40,15 +76,15 @@ export const FIGHTERS = {
     f('borokl', '보로클', 'Gantumur Bayanduuren', '4-2-0', '랭커', 'W', '33169982'),
     f('pitbull_fly', 'Pitbull', 'Tiago Xavier', '17-12-0', '랭커', 'W', '30038332'),
     f('ninja_fly', 'Ninja', 'Yamasaki Sora', '7-2-0', '랭커', 'G', '69534617'),
-    f('metallee', 'Metal Lee', '핫토리 슈토', '2-1-0', '랭커', 'S', '43792974', 'png'),
+    f('metallee', 'Metal Lee', '핫토리 슈토', '2-1-0', '랭커', 'S', '43792974', 'png', false, '플라이급'),
     f('maddog_fly', '매드독', '김민우', '2-2-0', '랭커', 'W', '43483071'),
     f('joker_fly', '조커', '정도한', '2-8-0', '랭커', 'W', '82156223'),
     f('dokkaebi', '도깨비발', '이선하', '2-3-0', '랭커', 'S', '51837721'),
     f('tigro', '티그로', '신창현', '3-1-0', '랭커', 'S', '54898276'),
-    f('baekgu', '백구', 'Rentsensenge Erkhembayar', '1-1-0', '랭커', 'W', '18063338', 'png'),
+    f('baekgu', '백구', 'Rentsensenge Erkhembayar', '1-1-0', '랭커', 'W', '18063338', 'png', false, '플라이급'),
   ],
   밴텀급: [
-    f('tusin', '투신', '김재웅', '16-8-0', 'CHAMP', 'W', '98660587', 'webp', true),
+    f('tusin', '투신', '김재웅', '16-8-0', 'CHAMP', 'W', '98660587', 'webp', true, '밴텀급'),
     f('fenrir', '펜리르', 'Daniiar Toichubek', '12-0-0', '1위', 'S', '39588679'),
     f('musa', '무사', '타케나카 다이치', '17-4-1', '2위', 'G', '64797565'),
     f('bbagse', '빡세', '이진세', '7-5-0', '3위', 'S', '37864698'),
@@ -78,7 +114,7 @@ export const FIGHTERS = {
     f('madcow_ban', '매드카우', '이성원', '1-3-0', '랭커', 'S', '45557928'),
   ],
   페더급: [
-    f('sirasoni', '시라소니', '방성혁', '8-0-0', 'CHAMP', 'S', '79683172', 'webp', true),
+    f('sirasoni', '시라소니', '방성혁', '8-0-0', 'CHAMP', 'S', '79683172', 'webp', true, '페더급'),
     f('psycho', '싸이코', 'Victor Hugo', '26-7-0', '1위', 'W', '77842475'),
     f('wolfking', '울프킹', 'Adilet Nurmatov', '14-3-0', '2위', 'G', '37050120'),
     f('ares', '아레스', '김태균', '11-3-0', '3위', 'W', '82685239'),
@@ -107,12 +143,12 @@ export const FIGHTERS = {
     f('madcow_fed', '매드카우', '이성원', '1-3-0', '랭커', 'S', '45557928'),
   ],
   라이트급: [
-    f('captainkorea', '캡틴 코리아', '정한국', '14-11-2', 'CHAMP', 'W', '22363165', 'webp', true),
+    f('captainkorea', '캡틴 코리아', '정한국', '14-11-2', 'CHAMP', 'W', '22363165', 'webp', true, '라이트급'),
     f('subutai', '수부타이', 'Nandin-Erdene', '19-11-0', '1위', 'S', '95863943'),
     f('mercury', '머큐리', 'Flavio Santos', '14-10-0', '2위', 'S', '53339805'),
     f('jigsaw', '직쏘', '문기범', '14-8-0', '3위', 'W', '32056354'),
     f('youngboss', '영보스', '박어진', '9-2-1', '4위', 'W', '76220784'),
-    f('sakura', '사쿠라', '황도윤', '3-6-0', '5위', 'S', '65081168', 'png'),
+    f('sakura', '사쿠라', '황도윤', '3-6-0', '5위', 'S', '65081168', 'png', false, '라이트급'),
     f('ironspider', '아이언 스파이더', '오하라 주리', '36-21-2', '6위', 'S', '31975443'),
     f('hunter', '헌터', '박종헌', '7-6-0', '7위', 'G', '14674653'),
     f('bearfist', '곰주먹', '김정균', '4-4-0', '8위', 'S', '89975978'),
@@ -137,7 +173,7 @@ export const FIGHTERS = {
     f('commando', '코만도', 'Azizbek Norov', '7-4-0', '랭커', 'S', '38215319'),
   ],
   웰터급: [
-    f('huntsman', '헌츠맨', 'Sultan Omarov', '9-0-0', 'CHAMP', 'G', '51253531', 'webp', true),
+    f('huntsman', '헌츠맨', 'Sultan Omarov', '9-0-0', 'CHAMP', 'G', '51253531', 'webp', true, '웰터급'),
     f('leopard', '레오파드', 'Luan Santiago', '23-8-0', '1위', 'S', '27796067'),
     f('kingkong_w', '킹콩', '오일학', '5-4-0', '2위', 'W', '91010996'),
     f('garuda', '가루다', 'Ali Gadzhiev', '4-0-0', '3위', 'W', '41326305'),
@@ -159,7 +195,7 @@ export const FIGHTERS = {
     f('bluedragon', '청드래곤', '이청수', '1-1-0', '랭커', 'S', '17117825'),
   ],
   미들급: [
-    f('kingkong_m', '킹콩', '오일학', '5-4-0', 'CHAMP', 'W', '91010996', 'webp', true),
+    f('kingkong_m', '킹콩', '오일학', '5-4-0', 'CHAMP', 'W', '91010996', 'webp', true, '미들급'),
     f('thanos', '타노스', 'Eduardo Garvon', '17-6-1', '1위', 'G', '46333839'),
     f('samurai_mid', '사무라이', 'Patrick Kelvin', '9-2-0', '2위', 'S', '34473780'),
     f('momo', 'Momo', 'Sato Ryutaro', '10-2-0', '3위', 'G', '53287506'),
@@ -170,26 +206,26 @@ export const FIGHTERS = {
     f('phoenix_mid', 'Phoenix', 'Marcos Vinicius', '6-2-1', '8위', 'S', '71953510'),
     f('aladdin', '알라딘', 'Khusan Urakov', '6-2-0', '9위', 'S', '60922090'),
     f('captainhanam', '캡틴 하남', '최재현', '5-6-0', '10위', 'S', '42401461'),
-    f('dementor', 'Dementor', "Dylan O'Sullivan", '6-3-0', '랭커', 'S', '73762798', 'png'),
+    f('dementor', 'Dementor', "Dylan O'Sullivan", '6-3-0', '랭커', 'S', '73762798', 'png', false, '미들급'),
     f('savage', '세비지', '홍희원', '2-1-0', '랭커', 'S', '15335910'),
     f('pacman', '팩맨', '전호철', '3-4-0', '랭커', 'S', '98498348'),
     f('tungtung', '퉁순이', '박성운', '0-1-0', '랭커', 'S', '56124513'),
     f('jebe', '제베', 'Galsandorj Gantulga', '0-1-0', '랭커', 'W', '91192457'),
   ],
   헤비급: [
-    f('bigguy', 'The Big Guy', '양해준', '16-6-0', '1위', 'G', '51611046'),
-    f('jjangdol', '짱돌', '차정환', '14-5-3', '2위', 'S', '23743038'),
-    f('mammoth', '맘모스', '김명환', '10-4-0', '3위', 'W', '11958177'),
-    f('bossbaby', 'Boss Baby', 'Richard Jacobi', '10-2-1', '4위', 'S', '15303256'),
+    f('bigguy', 'The Big Guy', '양해준', '16-6-0', '1위', 'G', '51611046', 'webp', false, '헤비급'),
+    f('jjangdol', '짱돌', '차정환', '14-5-3', '2위', 'S', '23743038', 'webp', false, '헤비급'),
+    f('mammoth', '맘모스', '김명환', '10-4-0', '3위', 'W', '11958177', 'webp', false, '헤비급'),
+    f('bossbaby', 'Boss Baby', 'Richard Jacobi', '10-2-1', '4위', 'S', '15303256', 'webp', false, '헤비급'),
     f('jackpot', 'Jackpot', "O'Shay Jordan", '5-3-0', '5위', 'S', '84407642'),
-    f('slime_hvy', '슬라임', '정민훈', '3-3-0', '6위', 'W', '66669714'),
-    f('albam', '알밤', '이종구', '2-0-0', '7위', 'G', '38008098'),
-    f('hiroshima', 'Hiroshima', 'Oban Takaaki', '11-10-1', '8위', 'W', '80347858'),
-    f('scorpion_hvy', '스콜피온', '알리조다', '4-2-0', '9위', 'W', '69112783'),
-    f('mukali', '무칼리', 'Enkhjin Unenkhuu', '1-0-0', '랭커', 'S', '11539850'),
-    f('maui', '마우이', '김석민', '0-5-0', '랭커', 'S', '11711666'),
-    f('asura', '아수라', '김동환', '0-1-0', '랭커', 'G', '90258375'),
-    f('blackbear', '흑곰', '김도훈', '0-1-0', '랭커', 'S', '19443685'),
+    f('slime_hvy', '슬라임', '정민훈', '3-3-0', '6위', 'W', '66669714', 'webp', false, '헤비급'),
+    f('albam', '알밤', '이종구', '2-0-0', '7위', 'G', '38008098', 'webp', false, '헤비급'),
+    f('hiroshima', 'Hiroshima', 'Oban Takaaki', '11-10-1', '8위', 'W', '80347858', 'webp', false, '헤비급'),
+    f('scorpion_hvy', '스콜피온', '알리조다', '4-2-0', '9위', 'W', '69112783', 'webp', false, '헤비급'),
+    f('mukali', '무칼리', 'Enkhjin Unenkhuu', '1-0-0', '랭커', 'S', '11539850', 'webp', false, '헤비급'),
+    f('maui', '마우이', '김석민', '0-5-0', '랭커', 'S', '11711666', 'webp', false, '헤비급'),
+    f('asura', '아수라', '김동환', '0-1-0', '랭커', 'G', '90258375', 'webp', false, '헤비급'),
+    f('blackbear', '흑곰', '김도훈', '0-1-0', '랭커', 'S', '19443685', 'webp', false, '헤비급'),
   ],
 }
 

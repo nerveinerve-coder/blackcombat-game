@@ -41,11 +41,53 @@ export const MOVES = {
     accuracy: 60, knockdownChance: 0.20,
     emoji: '🦵',
   },
+  kneeKick: {
+    id: 'kneeKick', name: '니킥', korean: '니킥',
+    type: 'strike', target: 'body',
+    power: 22, speed: 70, stamina: 10,
+    accuracy: 78, knockdownChance: 0.05,
+    emoji: '🦵',
+  },
+  elbow: {
+    id: 'elbow', name: '엘보우', korean: '엘보우',
+    type: 'strike', target: 'head',
+    power: 30, speed: 70, stamina: 12,
+    accuracy: 75, knockdownChance: 0.12,
+    emoji: '💪',
+  },
+  elbowUpper: {
+    id: 'elbowUpper', name: '어퍼 엘보우', korean: '어퍼 엘보우',
+    type: 'strike', target: 'head',
+    power: 34, speed: 65, stamina: 14,
+    accuracy: 70, knockdownChance: 0.15,
+    emoji: '💪',
+  },
+  comboJabElbow: {
+    id: 'comboJabElbow', name: '잽 엘보우 콤보', korean: '잽 엘보우 콤보',
+    type: 'strike', target: 'head',
+    power: 38, speed: 75, stamina: 16,
+    accuracy: 72, knockdownChance: 0.14,
+    emoji: '💥',
+  },
+  comboElbowUppercut: {
+    id: 'comboElbowUppercut', name: '엘보우 어퍼컷 콤보', korean: '엘보우 어퍼컷 콤보',
+    type: 'strike', target: 'head',
+    power: 42, speed: 68, stamina: 18,
+    accuracy: 68, knockdownChance: 0.18,
+    emoji: '💥',
+  },
   takedown: {
     id: 'takedown', name: '테이크다운', korean: '테이크다운',
     type: 'grapple', target: 'body',
     power: 18, speed: 70, stamina: 18,
     accuracy: 70, knockdownChance: 0.0,
+    emoji: '🤼',
+  },
+  takedownSpecial: {
+    id: 'takedownSpecial', name: '스페셜 테이크다운', korean: '스페셜 테이크다운',
+    type: 'grapple', target: 'body',
+    power: 28, speed: 65, stamina: 22,
+    accuracy: 65, knockdownChance: 0.25,
     emoji: '🤼',
   },
   clinch: {
@@ -60,6 +102,20 @@ export const MOVES = {
     type: 'grapple', target: 'body',
     power: 45, speed: 50, stamina: 22,
     accuracy: 55, knockdownChance: 0.0,
+    emoji: '🤼',
+  },
+  armbar: {
+    id: 'armbar', name: '암바', korean: '암바',
+    type: 'grapple', target: 'body',
+    power: 50, speed: 48, stamina: 24,
+    accuracy: 52, knockdownChance: 0.0,
+    emoji: '🤼',
+  },
+  rearNakedChoke: {
+    id: 'rearNakedChoke', name: '리어 네이키드 초크', korean: '리어 네이키드 초크',
+    type: 'grapple', target: 'body',
+    power: 55, speed: 45, stamina: 26,
+    accuracy: 50, knockdownChance: 0.0,
     emoji: '🤼',
   },
   guard: {
@@ -78,9 +134,15 @@ export const MOVES = {
   },
 }
 
-// 파이터 타입별 사용 가능한 기술
 export const TYPE_MOVES = {
-  스트라이커: ['jab', 'cross', 'hook', 'lowKick', 'bodyKick', 'highKick', 'guard', 'evade'],
-  그래플러: ['jab', 'cross', 'takedown', 'clinch', 'submission', 'guard', 'evade'],
-  웰라운더: ['jab', 'cross', 'hook', 'lowKick', 'takedown', 'clinch', 'guard', 'evade'],
+  스트라이커: ['jab', 'cross', 'hook', 'lowKick', 'bodyKick', 'highKick', 'elbow', 'elbowUpper', 'guard', 'evade'],
+  그래플러: ['jab', 'cross', 'takedown', 'clinch', 'submission', 'armbar', 'rearNakedChoke', 'takedownSpecial', 'guard', 'evade'],
+  웰라운더: ['jab', 'cross', 'hook', 'lowKick', 'takedown', 'clinch', 'kneeKick', 'guard', 'evade'],
+}
+
+export const SPECIAL_MOVES = {
+  스트라이커: ['elbow', 'elbowUpper'],
+  그래플러: ['armbar', 'rearNakedChoke', 'takedownSpecial'],
+  웰라운더: ['kneeKick', 'clinch'],
+  viper: ['comboJabElbow', 'comboElbowUppercut'], // 바이퍼 전용
 }

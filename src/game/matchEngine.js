@@ -11,14 +11,25 @@ const getWeightDiff = (fighter1, fighter2) => {
 // 데미지 계산 (능력치 기반)
 const calcDamage = (move, attacker, defender) => {
   const isStrike = move.type === 'strike'
+  const isGrapple = move.type === 'grapple'
+
+  // 타격: sPower 반영, 그래플: gPower 반영
   const attackStat = isStrike ? attacker.stats.sPower : attacker.stats.gPower
   const defenseStat = isStrike ? defender.stats.sDefense : defender.stats.gDefense
   const chin = defender.stats.chin || 70
-  const speedBonus = attacker.stats.sSpeed > defender.stats.sSpeed ? 1.12 : 0.92
+
+  // 속도 보너스
+  const speedBonus = attacker.stats.sSpeed > defender.stats.sSpeed ? 1.15 : 0.88
+
+  // 능력치 배율 (100 기준, 높을수록 더 강함)
+  const attackMultiplier = attackStat / 75  // 75 기준으로 배율 계산
+  const defenseMultiplier = (defenseStat + chin) / 150
+
   const randomFactor = 0.85 + Math.random() * 0.3
-  const base = (move.power * attackStat) / 100
-  const reduction = (defenseStat + chin) / 500
-  return Math.max(3, Math.round(base * speedBonus * randomFactor * (1 - reduction)))
+  const base = move.power * attackMultiplier * speedBonus * randomFactor
+  const reduced = base * (1 - defenseMultiplier * 0.5)
+
+  return Math.max(3, Math.round(reduced))
 }
 
 // 스태미나 소모 계산 (능력치 기반)

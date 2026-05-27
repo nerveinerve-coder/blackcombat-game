@@ -34,18 +34,27 @@ export const getWeightDiff = (fighter1, fighter2) => {
 }
 
 export const applyWeightBonus = (fighter, opponent) => {
-  const diff = WEIGHT_CLASS_ORDER.indexOf(fighter.weightClass) - WEIGHT_CLASS_ORDER.indexOf(opponent.weightClass)
+  const myIdx = WEIGHT_CLASS_ORDER.indexOf(fighter.weightClass)
+  const oppIdx = WEIGHT_CLASS_ORDER.indexOf(opponent.weightClass)
+  const diff = myIdx - oppIdx // 양수면 내가 더 무거운 체급
   const stats = { ...fighter.stats }
+
   if (diff > 0) {
-    // 더 무거운 체급 → 파워+5, 맷집+5 per 단계
-    stats.sPower += diff * 5
-    stats.gPower += diff * 5
-    stats.chin += diff * 5
+    // 더 무거운 체급 → 체급 차이에 따라 파워/맷집 대폭 증가
+    // 1단계: +8, 2단계: +18, 3단계: +30, 4단계: +44, 5단계: +60, 6단계: +78
+    const bonus = diff * (diff + 1) * 4
+    stats.sPower = Math.min(120, stats.sPower + bonus)
+    stats.gPower = Math.min(120, stats.gPower + bonus)
+    stats.chin = Math.min(120, stats.chin + bonus)
+    stats.sDefense = Math.min(120, stats.sDefense + bonus * 0.7)
+    stats.gDefense = Math.min(120, stats.gDefense + bonus * 0.7)
   } else if (diff < 0) {
-    // 더 가벼운 체급 → 스피드+5 per 단계
-    stats.sSpeed += Math.abs(diff) * 5
-    stats.gSpeed += Math.abs(diff) * 5
+    // 더 가벼운 체급 → 스피드만 소폭 증가 (체급 차이 만회 불가)
+    const absDiff = Math.abs(diff)
+    stats.sSpeed = Math.min(100, stats.sSpeed + absDiff * 3)
+    stats.gSpeed = Math.min(100, stats.gSpeed + absDiff * 3)
   }
+
   return { ...fighter, stats }
 }
 

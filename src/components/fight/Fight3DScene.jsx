@@ -22,6 +22,7 @@ const ANIM_MAP = {
   comboJabElbow: 'combo_jab_elbow',
   comboElbowUppercut: 'combo_elbow_uppercut',
   takedown: 'takedown_attack',
+  takedownSpecial: 'takedown_attack_special',
   submission: 'takedown_attack',
   armbar: 'takedown_attack_special',
   rearNakedChoke: 'takedown_attack_special',

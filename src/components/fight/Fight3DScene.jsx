@@ -31,6 +31,7 @@ const ANIM_MAP = {
   hit_body: 'hit_body',
   hit_leg: 'hit_leg',
   hit_takedown: 'hit_takedown',
+  hit_takedown_special: 'hit_takedown_special',
   // 넉다운
   knockdown_forward: 'knockdown_forward',
   knockdown_backward: 'knockdown_backward',
@@ -52,7 +53,11 @@ const HIT_REACTION = {
   elbowUpper: 'hit_head', comboJabElbow: 'hit_head', comboElbowUppercut: 'hit_head',
   bodyKick: 'hit_body', kneeKick: 'hit_body', clinch: 'hit_body',
   lowKick: 'hit_leg',
-  takedown: 'hit_takedown', takedownSpecial: 'hit_takedown', submission: 'hit_takedown',
+  takedown: 'hit_takedown',
+  takedownSpecial: 'hit_takedown_special',
+  submission: 'hit_takedown_special',
+  armbar: 'hit_takedown_special',
+  rearNakedChoke: 'hit_takedown_special',
 }
 
 const KNOCKDOWN_REACTION = {

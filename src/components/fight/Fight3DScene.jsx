@@ -61,13 +61,15 @@ const KNOCKDOWN_REACTION = {
   takedown: 'hit_takedown', takedownSpecial: 'hit_takedown',
 }
 
-let cachedGLTF = null
-const gltfPromise = new Promise((resolve) => {
-  new GLTFLoader().load('/fighter.glb', (gltf) => {
-    cachedGLTF = gltf
-    resolve(gltf)
-  })
-})
+const gltfCache = {}
+const loadGLTF = (url) => {
+  if (!gltfCache[url]) {
+    gltfCache[url] = new Promise((resolve) => {
+      new GLTFLoader().load(url, resolve)
+    })
+  }
+  return gltfCache[url]
+}
 
 export default function Fight3DScene({ playerState, opponentState, playerType = 'W', opponentType = 'W', lastEvent, playerData, opponentData }) {
   const mountRef = useRef()
@@ -167,9 +169,16 @@ export default function Fight3DScene({ playerState, opponentState, playerType = 
       }
     }
 
-    gltfPromise.then(gltf => {
-      setupFighter(gltf, 'left')
-      setupFighter(gltf, 'right')
+    const getModelUrl = (fighterData) => {
+      return fighterData?.weightClass === '여성 아톰급' ? '/fighter.glb' : '/ybot.glb'
+    }
+
+    const leftUrl = getModelUrl(stateRef.current.playerData)
+    const rightUrl = getModelUrl(stateRef.current.opponentData)
+
+    Promise.all([loadGLTF(leftUrl), loadGLTF(rightUrl)]).then(([leftGltf, rightGltf]) => {
+      setupFighter(leftGltf, 'left')
+      setupFighter(rightGltf, 'right')
       renderRef.current.ready = true
     })
 

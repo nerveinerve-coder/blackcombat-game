@@ -1,7 +1,8 @@
 const B = 'https://www.blackcombat-official.com/theme/blackcombat/img/fighter_new'
 
-const makeStats = (type, rank) => {
-  const base = rank === 'CHAMP' ? 88 : rank === '1위' ? 84 : rank === '2위' ? 81 : rank === '3위' ? 78 : rank === '4위' ? 75 : rank === '5위' ? 73 : rank === '6위' ? 71 : rank === '7위' ? 69 : rank === '8위' ? 67 : rank === '9위' ? 65 : 62
+const makeStats = (type, rank, isUnderground = false) => {
+  let base = rank === 'CHAMP' ? 88 : rank === '1위' ? 84 : rank === '2위' ? 81 : rank === '3위' ? 78 : rank === '4위' ? 75 : rank === '5위' ? 73 : rank === '6위' ? 71 : rank === '7위' ? 69 : rank === '8위' ? 67 : rank === '9위' ? 65 : 62
+  if (isUnderground) base = Math.round(base * 0.6)
   if (type === 'G') return {
     gPower: base+4, gDefense: base+2, gSpeed: base-2,
     sPower: base-14, sDefense: base-10, sSpeed: base-12,
@@ -25,7 +26,7 @@ const specials = {
   W: ['kneeKick', 'clinch', 'lowKick'],
 }
 
-export const WEIGHT_CLASS_ORDER = ['플라이급', '밴텀급', '페더급', '라이트급', '웰터급', '미들급', '헤비급']
+export const WEIGHT_CLASS_ORDER = ['여성 아톰급', '플라이급', '밴텀급', '페더급', '라이트급', '웰터급', '미들급', '헤비급']
 
 export const getWeightDiff = (fighter1, fighter2) => {
   const idx1 = WEIGHT_CLASS_ORDER.indexOf(fighter1.weightClass)
@@ -58,10 +59,11 @@ export const applyWeightBonus = (fighter, opponent) => {
   return { ...fighter, stats }
 }
 
-const f = (id, nickname, name, record, rank, type, seq, ext = 'webp', isChamp = false, weightClass = '', height = 170) => ({
+const f = (id, nickname, name, record, rank, type, seq, ext = 'webp', isChamp = false, weightClass = '', height = 170, isUnderground = false) => ({
   id, nickname, name, record, rank, type, weightClass, height,
+  isUnderground,
   img: `${B}/${seq}/${seq}_${isChamp ? 'rankingChamp' : 'ranking'}.${ext}`,
-  stats: makeStats(type, rank),
+  stats: makeStats(type, rank, isUnderground),
   specials: specials[type],
 })
 
@@ -235,6 +237,19 @@ export const FIGHTERS = {
     f('maui', '마우이', '김석민', '0-5-0', '랭커', 'S', '11711666', 'webp', false, '헤비급', 170),
     f('asura', '아수라', '김동환', '0-1-0', '랭커', 'G', '90258375', 'webp', false, '헤비급', 172),
     f('blackbear', '흑곰', '김도훈', '0-1-0', '랭커', 'S', '19443685', 'webp', false, '헤비급', 188),
+  ],
+  언더그라운드: [
+    f('godfather', 'GodFather', '검정', '3-0-0', 'CHAMP', 'W', '34629044', 'webp', true, '페더급', 175, true),
+    f('koko', 'KOKO', '소재호', '1-1-0', '3위', 'S', '38860186', 'webp', false, '페더급', 172, true),
+    f('thelion', 'The Lion', '오반', '0-1-0', '4위', 'S', '87240414', 'webp', false, '라이트급', 178, true),
+    f('sasin', '사신', '김남신', '0-1-0', '5위', 'S', '42536332', 'webp', false, '헤비급', 180, true),
+    f('ddukbaegi', '뚝배기사범', '호철', '0-2-0', '6위', 'S', '45606965', 'webp', false, '웰터급', 175, true),
+  ],
+  여성부: [
+    f('jjangu', '짱구', '전수민', '2-1-0', '1위', 'S', '22943074', 'webp', false, '여성 아톰급', 158),
+    f('ghost_w', '고스트', '홍예린', '5-6-0', '2위', 'W', '15664333', 'webp', false, '여성 아톰급', 160),
+    f('barbie', 'Barbie', '히라타 아야네', '4-3-0', '3위', 'S', '27588721', 'webp', false, '여성 아톰급', 155),
+    f('libby', 'Libby', '조은비', '1-7-0', '4위', 'S', '30158915', 'webp', false, '여성 아톰급', 157),
   ],
 }
 

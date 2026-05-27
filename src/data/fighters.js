@@ -184,7 +184,7 @@ export const FIGHTERS = {
     f('commando', '코만도', 'Azizbek Norov', '7-4-0', '랭커', 'S', '38215319', 'webp', false, '라이트급', 175),
   ],
   웰터급: [
-    f('huntsman', '헌츠맨', 'Sultan Omarov', '9-0-0', 'CHAMP', 'G', '51253531', 'webp', true, '웰터급', 183),
+    f('huntsman', '헌츠맨', 'Sultan Omarov', '9-0-0', 'CHAMP', 'G', '51253531', 'webp', false, '웰터급', 183),
     f('leopard', '레오파드', 'Luan Santiago', '23-8-0', '1위', 'S', '27796067', 'webp', false, '웰터급', 181),
     f('kingkong_w', '킹콩', '오일학', '5-4-0', '2위', 'W', '91010996', 'webp', false, '웰터급', 177),
     f('garuda', '가루다', 'Ali Gadzhiev', '4-0-0', '3위', 'W', '41326305', 'webp', false, '웰터급', 180),

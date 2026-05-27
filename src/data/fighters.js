@@ -1,8 +1,9 @@
 const B = 'https://www.blackcombat-official.com/theme/blackcombat/img/fighter_new'
 
-const makeStats = (type, rank, isUnderground = false) => {
+const makeStats = (type, rank, isUnderground = false, isWomen = false) => {
   let base = rank === 'CHAMP' ? 88 : rank === '1위' ? 84 : rank === '2위' ? 81 : rank === '3위' ? 78 : rank === '4위' ? 75 : rank === '5위' ? 73 : rank === '6위' ? 71 : rank === '7위' ? 69 : rank === '8위' ? 67 : rank === '9위' ? 65 : 62
   if (isUnderground) base = Math.round(base * 0.6)
+  if (isWomen) base = Math.round(base * 0.7) // 여성부는 남성 플라이급보다 훨씬 약하게
   if (type === 'G') return {
     gPower: base+4, gDefense: base+2, gSpeed: base-2,
     sPower: base-14, sDefense: base-10, sSpeed: base-12,
@@ -63,7 +64,7 @@ const f = (id, nickname, name, record, rank, type, seq, ext = 'webp', isChamp = 
   id, nickname, name, record, rank, type, weightClass, height,
   isUnderground,
   img: `${B}/${seq}/${seq}_${isChamp ? 'rankingChamp' : 'ranking'}.${ext}`,
-  stats: makeStats(type, rank, isUnderground),
+  stats: makeStats(type, rank, isUnderground, weightClass === '여성 아톰급'),
   specials: specials[type],
 })
 

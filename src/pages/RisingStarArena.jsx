@@ -121,18 +121,22 @@ function Joystick({onMove,side,size=100}) {
   return (
     <div onTouchStart={hs} onTouchMove={hm} onTouchEnd={he} onMouseDown={hs} onMouseMove={hm} onMouseUp={he}
       style={{width:size,height:size,borderRadius:'50%',background:sc[side],border:`2px solid ${kc[side].replace('0.6','0.3')}`,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',touchAction:'none',flexShrink:0}}>
-      {side==='left'&&(<><span style={{position:'absolute',top:4,fontSize:8,color:'rgba(59,130,246,0.6)'}}>방어↑</span><span style={{position:'absolute',bottom:4,fontSize:8,color:'rgba(59,130,246,0.6)'}}>↓레그</span><span style={{position:'absolute',left:2,fontSize:8,color:'rgba(59,130,246,0.6)'}}>바디←</span><span style={{position:'absolute',right:2,fontSize:8,color:'rgba(59,130,246,0.6)'}}>→TD</span></>)}
+      {side==='left'&&(<><span style={{position:'absolute',top:4,fontSize:8,color:'rgba(59,130,246,0.6)'}}>↑ 머리</span><span style={{position:'absolute',bottom:4,fontSize:8,color:'rgba(59,130,246,0.6)'}}>↓ 레그</span><span style={{position:'absolute',left:2,fontSize:8,color:'rgba(59,130,246,0.6)'}}>바디 ←</span><span style={{position:'absolute',right:2,fontSize:8,color:'rgba(59,130,246,0.6)'}}>→ TD</span></>)}
       <div ref={stickRef} style={{width:size*0.44,height:size*0.44,borderRadius:'50%',background:kc[side],border:'2px solid rgba(255,255,255,0.4)',transition:'transform 0.05s',pointerEvents:'none',zIndex:1}}/>
     </div>
   )
 }
 
-function ActionButton({label,subLabel,color,onPress,onRelease,disabled}) {
+function ActionButton({label,subLabel,color,onPress,onRelease,disabled,size=52,style={}}) {
+  const labelSize=size>=60?15:14
+  const subLabelSize=size>=60?8:7
+  const handlePress=(e)=>{e.preventDefault();onPress?.()}
+  const handleRelease=(e)=>{e.preventDefault();onRelease?.()}
   return (
-    <button onTouchStart={onPress} onMouseDown={onPress} onTouchEnd={onRelease} onMouseUp={onRelease} disabled={disabled}
-      style={{width:52,height:52,borderRadius:'50%',background:disabled?'rgba(100,100,100,0.3)':color,border:'2px solid rgba(255,255,255,0.3)',color:'white',fontWeight:'bold',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',touchAction:'none',cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.4:1,flexShrink:0}}>
-      <span style={{fontSize:14,lineHeight:1}}>{label}</span>
-      {subLabel&&<span style={{fontSize:8,opacity:0.7,lineHeight:1.2}}>{subLabel}</span>}
+    <button onTouchStart={handlePress} onMouseDown={handlePress} onTouchEnd={handleRelease} onTouchCancel={handleRelease} onMouseUp={handleRelease} onMouseLeave={handleRelease} disabled={disabled}
+      style={{width:size,height:size,borderRadius:'50%',background:disabled?'rgba(100,100,100,0.3)':color,border:'2px solid rgba(255,255,255,0.34)',boxShadow:disabled?'none':'0 7px 16px rgba(0,0,0,0.32)',color:'white',fontWeight:'bold',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',touchAction:'none',cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.4:1,flexShrink:0,WebkitTapHighlightColor:'transparent',userSelect:'none',...style}}>
+      <span style={{fontSize:labelSize,lineHeight:1}}>{label}</span>
+      {subLabel&&<span style={{fontSize:subLabelSize,opacity:0.75,lineHeight:1.2}}>{subLabel}</span>}
     </button>
   )
 }
@@ -147,8 +151,8 @@ export default function RisingStarArena() {
   const mountRef=useRef(),rendererRef=useRef(),sceneRef=useRef(),cameraRef=useRef()
   const playerRef=useRef(),opponentRef=useRef()
   const clockRef=useRef(new THREE.Clock()),animIdRef=useRef()
-  const leftJoyRef=useRef({x:0,y:0}),rightJoyRef=useRef({x:0,y:0})
-  const defenseStateRef=useRef(null),buttonPressTimeRef=useRef({})
+  const leftJoyRef=useRef({x:0,y:0})
+  const defenseStateRef=useRef(null),defenseButtonDownRef=useRef(false),buttonPressTimeRef=useRef({}),activeActionButtonsRef=useRef(new Set())
   const walkDirRef=useRef({dir:'walk_forward',count:0})
   const clashRef=useRef(null) // 동시 공격 충돌 판정 {playerWins:bool}
 
@@ -324,12 +328,38 @@ export default function RisingStarArena() {
       currentWalkAnim:null,hips,baseHipsPosition}
   }
 
-  const handleLeftJoyMove=(v)=>{
-    leftJoyRef.current=v
+  const updateDefenseFromLeftJoy=(v=leftJoyRef.current)=>{
+    if(!defenseButtonDownRef.current){
+      defenseStateRef.current=null
+      setDefenseDisplay(null)
+      return
+    }
     const dir=getJoyDir(v)
     const defMap={up:'block_head',left:'block_body',down:'block_leg',right:'block_takedown'}
     const nd=dir==='neutral'?null:defMap[dir]
-    defenseStateRef.current=nd;setDefenseDisplay(nd)
+    defenseStateRef.current=nd
+    setDefenseDisplay(nd)
+  }
+
+  const handleLeftJoyMove=(v)=>{
+    leftJoyRef.current=v
+    updateDefenseFromLeftJoy(v)
+  }
+
+  const handleDefensePress=()=>{
+    defenseButtonDownRef.current=true
+    updateDefenseFromLeftJoy(leftJoyRef.current)
+  }
+
+  const handleDefenseRelease=()=>{
+    defenseButtonDownRef.current=false
+    defenseStateRef.current=null
+    setDefenseDisplay(null)
+  }
+
+  const getPlayerMovementJoy=()=>{
+    if(defenseButtonDownRef.current||activeActionButtonsRef.current.size>0) return {x:0,y:0}
+    return leftJoyRef.current
   }
 
   const handleFinish=useCallback((winnerSide,type)=>{
@@ -446,7 +476,7 @@ export default function RisingStarArena() {
     const animate=()=>{
       animIdRef.current=requestAnimationFrame(animate)
       const delta=clockRef.current.getDelta()
-      const joy=rightJoyRef.current,joyMag=Math.sqrt(joy.x*joy.x+joy.y*joy.y)
+      const joy=getPlayerMovementJoy(),joyMag=Math.sqrt(joy.x*joy.x+joy.y*joy.y)
       if(playerRef.current?.state===FS.IDLE&&opponentRef.current&&joyMag>0.1){
         const pp=playerRef.current.group,op=opponentRef.current.group
         const nx=pp.position.x+joy.x*MOVE_SPEED_PLAYER,nz=pp.position.z+joy.y*MOVE_SPEED_PLAYER
@@ -456,8 +486,9 @@ export default function RisingStarArena() {
         const dx2=op.position.x-pp.position.x,dz2=op.position.z-pp.position.z
         if(Math.abs(dx2)>0.01||Math.abs(dz2)>0.01) pp.rotation.y=Math.atan2(dx2,dz2)
       }
-      // 플레이어 넉다운 → 오른쪽 조이스틱으로 일어나기
-      if(playerRef.current?.state===FS.KNOCKDOWN&&playerRef.current?.canGetUp&&joyMag>0.3){
+      // 플레이어 넉다운 → 왼쪽 조이스틱으로 일어나기
+      const getUpJoy=leftJoyRef.current,getUpJoyMag=Math.sqrt(getUpJoy.x*getUpJoy.x+getUpJoy.y*getUpJoy.y)
+      if(playerRef.current?.state===FS.KNOCKDOWN&&playerRef.current?.canGetUp&&getUpJoyMag>0.3){
         const ga=playerRef.current.knockdownDir==='front'?'getting_up_front':'getting_up_back'
         const glb=ANIM_MAP[ga]||ga,anim=playerRef.current.actions[glb]
         if(anim){
@@ -604,7 +635,8 @@ export default function RisingStarArena() {
       const _aIsTD   = moveId.includes('takedown')
       const _aSpeed  = _aIsTD ? (opponent.stats?.tdSpeed||80) : _aIsKick ? (opponent.stats?.kickSpeed||80) : (opponent.stats?.punchSpeed||80)
       const aiHitDelay = Math.round((MOVE_ACTIVATION_MS[moveId]||280) * (80/_aSpeed))
-      const result=calculateRealtimeAttack({moveId,attacker:opponent,defender:player,defenseState:defenseStateRef.current,attackerStamina:opponentStaminaRef.current})
+      const effectiveDefenseState=playerRef.current?.state===FS.IDLE?defenseStateRef.current:null
+      const result=calculateRealtimeAttack({moveId,attacker:opponent,defender:player,defenseState:effectiveDefenseState,attackerStamina:opponentStaminaRef.current})
       const ns={current:Math.max(0,opponentStaminaRef.current.current-result.staminaCost),max:Math.max(10,opponentStaminaRef.current.max-result.maxStaminaLoss)}
       opponentStaminaRef.current=ns;setOpponentStamina({...ns})
 
@@ -623,7 +655,7 @@ export default function RisingStarArena() {
         if(result.blocked){
           setActionLog(`${player?.nickname} 방어 성공!`)
           const nhm={block_head:result.damage>=10?'no_hit_big_head':'no_hit_light_head',block_body:result.damage>=9?'no_hit_big_body':'no_hit_light_body',block_leg:'no_hit_leg',block_takedown:'no_hit_takedown'}
-          const na=nhm[defenseStateRef.current];if(na)playHit(playerRef.current,na,null,{force:true})
+          const na=nhm[effectiveDefenseState];if(na)playHit(playerRef.current,na,null,{force:true})
           if(result.damage>0){const hk=result.hitZone==='head'?'head':result.hitZone==='body'?'body':'leg';const nh={...playerHPRef.current,[hk]:Math.max(0,playerHPRef.current[hk]-result.damage)};playerHPRef.current=nh;setPlayerHP({...nh})}
           const pSt={current:Math.max(0,playerStaminaRef.current.current-(result.defenseStaminaCost||6)),max:playerStaminaRef.current.max}
           playerStaminaRef.current=pSt;setPlayerStamina({...pSt})
@@ -640,14 +672,20 @@ export default function RisingStarArena() {
   },[])
 
   // ─── 플레이어 공격 ────────────────────────────────────────────
-  const handleButtonPress=(buttonId)=>{buttonPressTimeRef.current[buttonId]=Date.now()}
+  const handleButtonPress=(buttonId)=>{
+    buttonPressTimeRef.current[buttonId]=Date.now()
+    activeActionButtonsRef.current.add(buttonId)
+  }
 
   const handleButtonRelease=(buttonId)=>{
+    activeActionButtonsRef.current.delete(buttonId)
+    const pressAt=buttonPressTimeRef.current[buttonId]||Date.now()
+    delete buttonPressTimeRef.current[buttonId]
     if(gameStateRef.current!=='fighting')return
     if(!playerRef.current||playerRef.current.state!==FS.IDLE)return
     if(playerStaminaRef.current.current<15){setActionLog('스태미나 부족!');return}
 
-    const holdMs=Date.now()-(buttonPressTimeRef.current[buttonId]||0)
+    const holdMs=Date.now()-pressAt
     const leftDir=getJoyDir(leftJoyRef.current)
     const isTDMove=buttonId==='grapple'
     if(isTDMove&&getDist()>TD_RANGE){setActionLog('더 가까이!');return}
@@ -729,6 +767,7 @@ export default function RisingStarArena() {
   }
 
   const isDisabled=gameState!=='fighting'||!playerRef.current||playerStamina.current<15
+  const defenseDisabled=gameState!=='fighting'||!playerRef.current
   const defenseLabel={block_head:'🛡 머리 방어',block_body:'🛡 바디 방어',block_leg:'🛡 레그 방어',block_takedown:'🛡 TD 방어'}
   const fmtTime=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
 
@@ -787,21 +826,20 @@ export default function RisingStarArena() {
       {defenseDisplay&&(<div style={{position:'absolute',top:'16%',left:'50%',transform:'translateX(-50%)',background:'rgba(59,130,246,0.8)',color:'#fff',padding:'4px 14px',borderRadius:20,fontSize:12,fontWeight:'bold'}}>{defenseLabel[defenseDisplay]}</div>)}
       {actionLog&&(<div style={{position:'absolute',top:'22%',left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.7)',color:'#fff',padding:'5px 14px',borderRadius:20,fontSize:12,fontWeight:'bold',whiteSpace:'nowrap'}}>{actionLog}</div>)}
       {gameState==='roundBreak'&&(<div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.7)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12}}><p style={{fontSize:48}}>🔔</p><p style={{fontSize:24,fontWeight:900,color:'#eab308'}}>라운드 {round} 종료</p><p style={{fontSize:16,color:'#fff'}}>라운드 {round+1} 준비중...</p><p style={{color:'rgba(255,255,255,0.6)',fontSize:12}}>{player?.nickname}: {totalScoreRef.current.player.toFixed(0)}점 / {opponent?.nickname}: {totalScoreRef.current.opponent.toFixed(0)}점</p></div>)}
-      <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'8px 16px 24px',background:'linear-gradient(0deg,rgba(0,0,0,0.9) 0%,transparent 100%)'}}>
-        <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between'}}>
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
-            <span style={{color:'rgba(59,130,246,0.8)',fontSize:9,fontWeight:'bold'}}>타겟/방어</span>
-            <Joystick onMove={handleLeftJoyMove} side="left" size={95}/>
+      <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'8px 14px calc(18px + env(safe-area-inset-bottom, 0px))',background:'linear-gradient(0deg,rgba(0,0,0,0.92) 0%,transparent 100%)'}}>
+        <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:10}}>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,flexShrink:0}}>
+            <span style={{color:'rgba(59,130,246,0.8)',fontSize:9,fontWeight:'bold'}}>이동 / 타겟 / 방어</span>
+            <Joystick onMove={handleLeftJoyMove} side="left" size={105}/>
+            <span style={{color:'rgba(255,255,255,0.45)',fontSize:8}}>방어+방향 / 공격+방향</span>
           </div>
-          <div style={{position:'relative',width:210,height:170,flexShrink:0}}>
-            <div style={{position:'absolute',right:0,bottom:0,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-              <span style={{color:'rgba(234,179,8,0.8)',fontSize:9,fontWeight:'bold'}}>이동</span>
-              <Joystick onMove={v=>{rightJoyRef.current=v}} side="right" size={95}/>
-            </div>
-            <div style={{position:'absolute',left:50,bottom:9}}><ActionButton label="1" subLabel="앞손" color="rgba(239,68,68,0.75)" onPress={()=>handleButtonPress('one')} onRelease={()=>handleButtonRelease('one')} disabled={isDisabled}/></div>
-            <div style={{position:'absolute',left:64,bottom:62}}><ActionButton label="2" subLabel="뒷손" color="rgba(239,68,68,0.75)" onPress={()=>handleButtonPress('two')} onRelease={()=>handleButtonRelease('two')} disabled={isDisabled}/></div>
-            <div style={{position:'absolute',left:102,bottom:100}}><ActionButton label="킥" subLabel="Kick" color="rgba(249,115,22,0.75)" onPress={()=>handleButtonPress('kick')} onRelease={()=>handleButtonRelease('kick')} disabled={isDisabled}/></div>
-            <div style={{position:'absolute',left:155,bottom:114}}><ActionButton label="TD" subLabel="Grapple" color="rgba(139,92,246,0.75)" onPress={()=>handleButtonPress('grapple')} onRelease={()=>handleButtonRelease('grapple')} disabled={isDisabled}/></div>
+          <div style={{position:'relative',width:190,height:156,flexShrink:0,marginRight:-2,background:'radial-gradient(circle at 70% 70%, rgba(59,130,246,0.12) 0%, rgba(255,255,255,0.05) 44%, rgba(255,255,255,0) 74%)'}}>
+            <div style={{position:'absolute',right:0,bottom:0,width:172,height:140,borderRadius:28,background:'linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.018) 100%)',border:'1px solid rgba(255,255,255,0.07)',boxShadow:'inset 0 1px 0 rgba(255,255,255,0.06)',pointerEvents:'none'}}/>
+            <div style={{position:'absolute',left:10,bottom:18}}><ActionButton label="1" subLabel="앞손" color="rgba(239,68,68,0.82)" onPress={()=>handleButtonPress('one')} onRelease={()=>handleButtonRelease('one')} disabled={isDisabled} size={54}/></div>
+            <div style={{position:'absolute',left:38,bottom:66}}><ActionButton label="2" subLabel="뒷손" color="rgba(239,68,68,0.82)" onPress={()=>handleButtonPress('two')} onRelease={()=>handleButtonRelease('two')} disabled={isDisabled} size={54}/></div>
+            <div style={{position:'absolute',left:88,bottom:92}}><ActionButton label="킥" subLabel="Kick" color="rgba(249,115,22,0.84)" onPress={()=>handleButtonPress('kick')} onRelease={()=>handleButtonRelease('kick')} disabled={isDisabled} size={56}/></div>
+            <div style={{position:'absolute',left:132,bottom:56}}><ActionButton label="TD" subLabel="Grapple" color="rgba(139,92,246,0.84)" onPress={()=>handleButtonPress('grapple')} onRelease={()=>handleButtonRelease('grapple')} disabled={isDisabled} size={56}/></div>
+            <div style={{position:'absolute',left:102,bottom:4}}><ActionButton label="방어" subLabel="Guard" color="rgba(59,130,246,0.9)" onPress={handleDefensePress} onRelease={handleDefenseRelease} disabled={defenseDisabled} size={62} style={{border:'2px solid rgba(147,197,253,0.72)',boxShadow:'0 0 0 4px rgba(59,130,246,0.14), 0 8px 18px rgba(0,0,0,0.38)'}}/></div>
           </div>
         </div>
       </div>

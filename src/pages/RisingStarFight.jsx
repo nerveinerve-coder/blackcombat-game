@@ -4,10 +4,27 @@ import { FIGHTERS, WEIGHT_CLASSES } from '../data/fighters.js'
 
 const TYPE_COLOR = {
   G: 'text-blue-400 bg-blue-400/10 border-blue-400/30',
-  S: 'text-red-400 bg-red-400/10 border-red-400/30',
+  S: 'text-orange-400 bg-orange-400/10 border-orange-400/30',
+  B: 'text-red-400 bg-red-400/10 border-red-400/30',
   W: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
 }
-const TYPE_LABEL = { G: '🤼 그래플러', S: '🥊 스트라이커', W: '⚡ 웰라운더' }
+const TYPE_LABEL = { G: '🤼 그래플러', S: '🦵 스트라이커', B: '🥊 복서', W: '⚡ 웰라운더' }
+
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n))
+const avg = (...values) => Math.round(values.reduce((sum, v) => sum + (Number(v) || 0), 0) / values.length)
+const getFighterSummaryStats = (fighter) => {
+  const st = fighter?.stats || {}
+  return [
+    { label: '펀치', value: avg(st.punchPower, st.punchSpeed), color: 'bg-red-500' },
+    { label: '킥', value: avg(st.kickPower, st.kickSpeed), color: 'bg-orange-400' },
+    { label: 'TD', value: avg(st.tdPower, st.tdSpeed), color: 'bg-blue-500' },
+    { label: 'TD방어', value: Math.round(st.tdDefense || 0), color: 'bg-cyan-400' },
+    { label: '카디오', value: avg(st.stamina, st.recovery), color: 'bg-emerald-400' },
+    { label: '맷집', value: Math.round(st.chin || 0), color: 'bg-purple-400' },
+  ]
+}
+const getStatBarWidth = (value) => `${clamp(((value - 50) / 50) * 88 + 12, 6, 100)}%`
+const getStatTone = (value) => value >= 90 ? 'text-yellow-300' : value >= 80 ? 'text-white' : value >= 70 ? 'text-gray-300' : 'text-gray-500'
 
 export default function RisingStarFight() {
   const navigate = useNavigate()
@@ -133,21 +150,19 @@ export default function RisingStarFight() {
               <div className="p-2">
                 <p className="text-[12px] font-black mb-0.5 truncate">{f.nickname}</p>
                 <p className="text-[9px] text-gray-500 mb-1.5">{f.record}</p>
-                <span className={`text-[8px] px-1.5 py-0.5 rounded-full border font-bold ${TYPE_COLOR[f.type]}`}>
-                  {TYPE_LABEL[f.type]}
+                <span className={`inline-flex items-center gap-0.5 text-[8px] px-1.5 py-0.5 rounded-full border font-bold ${TYPE_COLOR[f.type] || TYPE_COLOR.W}`}>
+                  {TYPE_LABEL[f.type] || TYPE_LABEL.W}
                 </span>
-                <div className="mt-1.5 flex flex-col gap-0.5">
-                  {[
-                    { label: '타격', value: f.stats.sPower, color: 'bg-red-500' },
-                    { label: '그래플', value: f.stats.gPower, color: 'bg-blue-500' },
-                    { label: '속도', value: f.stats.sSpeed, color: 'bg-yellow-400' },
-                  ].map(s => (
-                    <div key={s.label} className="flex items-center gap-1">
-                      <span className="text-[7px] text-gray-600 w-8">{s.label}</span>
-                      <div className="flex-1 h-0.5 bg-gray-800 rounded-full overflow-hidden">
-                        <div className={`h-full ${s.color} rounded-full`} style={{ width: `${s.value}%` }} />
+                <div className="mt-2 grid grid-cols-2 gap-x-1.5 gap-y-1">
+                  {getFighterSummaryStats(f).map(s => (
+                    <div key={s.label} className="min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <span className="text-[7px] text-gray-500 leading-none">{s.label}</span>
+                        <span className={`text-[7px] font-black leading-none tabular-nums ${getStatTone(s.value)}`}>{s.value}</span>
                       </div>
-                      <span className="text-[7px] text-gray-600">{s.value}</span>
+                      <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                        <div className={`h-full ${s.color} rounded-full transition-all`} style={{ width: getStatBarWidth(s.value) }} />
+                      </div>
                     </div>
                   ))}
                 </div>

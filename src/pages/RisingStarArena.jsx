@@ -8,10 +8,11 @@ import { calculateRealtimeAttack, calcStaminaRecovery, checkKnockdown, checkFini
 const loadGLTF = (url) => new Promise(r => new GLTFLoader().load(url, r))
 
 const FS = { IDLE:'idle', ATTACKING:'attacking', HIT:'hit', KNOCKDOWN:'knockdown', GETTING_UP:'getting_up', KO:'ko' }
-const KNOCKDOWN_DIR = { knockdown_front:'front', knockdown_back:'back', hit_takedown:'back', hit_takedown_pounding:'back', counter_hit_takedown:'back' }
+const KNOCKDOWN_DIR = { knockdown_front:'front', knockdown_back:'back', hit_takedown:'back', hit_takedown_pounding:'back', counter_hit_takedown:'back', counter_hit_takedown_pounding:'back' }
 const TD_COUNTER_MOVES = new Set(['uppercut_left_head','uppercut_right_head','kick_knee_head'])
 
-const PUNCH_RANGE = 138, KICK_RANGE = 162, TD_RANGE = 148, ATTACK_RANGE = 162
+const ATTACK_RANGE = 145
+const TD_RANGE = 138
 
 // ─── 발동 시간 & 우선순위 ─────────────────────────────────────────
 const MOVE_ACTIVATION_MS = {
@@ -24,12 +25,21 @@ const MOVE_ACTIVATION_MS = {
   takedown:520, takedown_pounding:760,
 }
 
-const getMoveEffectiveRange = (moveId) => {
-  if (!moveId) return PUNCH_RANGE
-  if (moveId.includes('takedown')) return TD_RANGE
-  if (moveId.includes('kick')||moveId.includes('knee')) return KICK_RANGE
-  return PUNCH_RANGE
+// 기술별 개별 유효 사거리 (MIN_DIST=120 기준)
+const MOVE_RANGE = {
+  kick_spinning_wheel_head:192, kick_high_head:182, kick_spinning_head:178,
+  kick_body:168, kick_leg:158,
+  straight_head:148, straight_body:142,
+  jab_head:138, jab_body:133,
+  smash_head:132, combo_elbow_uppercut_head:128,
+  takedown:138, takedown_pounding:138,
+  kick_knee_head:128,
+  hook_left_head:130, hook_right_head:130,
+  hook_left_body:125, hook_right_body:125,
+  uppercut_left_head:128, uppercut_right_head:128,
 }
+
+const getMoveEffectiveRange = (moveId) => MOVE_RANGE[moveId] || 138
 
 // 높을수록 더 빠른(우선순위 높은) 기술
 const calcAttackPriority = (moveId, fighter) => {
@@ -64,7 +74,7 @@ const ANIM_MAP = {
   block_head:'block_head', block_body:'block_body', block_leg:'block_leg', block_takedown:'block_takedown',
   knockdown_front:'knockdown_front', knockdown_back:'knockdown_back',
   getting_up_front:'getting_up_front', getting_up_back:'getting_up_back',
-  counter_hit_takedown:'counter_hit_takedown',
+  counter_hit_takedown:'counter_hit_takedown', counter_hit_takedown_pounding:'counter_hit_takedown_pounding',
   ko:'ko', victory:'victory', defeat:'defeat',
 }
 
@@ -171,90 +181,107 @@ export default function RisingStarArena() {
 
   // ─── 애니메이션 함수들 ─────────────────────────────────────────
 
-  // 공격: IDLE만, 완료까지 ATTACKING, 큐에 쌓인 피격 모션 처리
-  const playAnim = (fighterObj,animName,loop=false,onEnd) => {
+  const invalidateFighterAction = (fighterObj) => {
     if(!fighterObj) return
-    if(fighterObj.state!==FS.IDLE&&!loop) return
+    fighterObj.actionToken=(fighterObj.actionToken||0)+1
+    fighterObj.currentMoveId=null
+    fighterObj.counterWindowActive=false
+    fighterObj.queuedHitAnim=null
+  }
+
+  const playClip = (fighterObj,animName,{loop=false,state=FS.IDLE,fade=0.1,timeScale=1,onEnd,tokenGuard=false}={}) => {
+    if(!fighterObj) return false
     const glbAnim=ANIM_MAP[animName]||animName
-    const anim=fighterObj.actions[glbAnim]; if(!anim) return
+    const anim=fighterObj.actions[glbAnim]
+    if(!anim) return false
+    const token=fighterObj.actionToken||0
     const prev=fighterObj.currentAction
-    anim.reset();anim.setEffectiveWeight(1);anim.setEffectiveTimeScale(1)
-    anim.setLoop(loop?THREE.LoopRepeat:THREE.LoopOnce,1)
+    anim.reset();anim.setEffectiveWeight(1);anim.setEffectiveTimeScale(timeScale)
+    anim.setLoop(loop?THREE.LoopRepeat:THREE.LoopOnce,loop?Infinity:1)
     anim.clampWhenFinished=!loop;anim.play()
-    if(prev&&prev!==anim) prev.fadeOut(0.15)
-    fighterObj.currentAction=anim;fighterObj.currentWalkAnim=null
-    if(!loop){
-      fighterObj.state=FS.ATTACKING
-      fighterObj.queuedHitAnim=null // 새 공격 시 큐 초기화
-      const dur=anim.getClip().duration*1000
+    if(prev&&prev!==anim) prev.fadeOut(fade)
+    fighterObj.currentAction=anim
+    fighterObj.currentWalkAnim=null
+    fighterObj.state=state
+    if(!loop&&onEnd){
+      const dur=anim.getClip().duration*1000/Math.max(0.01,timeScale)
       setTimeout(()=>{
-        if(fighterObj.state===FS.ATTACKING){
-          fighterObj.state=FS.IDLE
-          const queued=fighterObj.queuedHitAnim
-          fighterObj.queuedHitAnim=null
-          if(queued) queued() // 큐에 있던 피격 모션 실행
-          else if(onEnd) onEnd()
-        }
+        if(tokenGuard&&fighterObj.actionToken!==token) return
+        onEnd()
       },dur)
     }
+    return true
   }
 
-  // 피격/방어성공: KNOCKDOWN/GETTING_UP/KO 제외. ATTACKING 중이면 큐에 저장
-  const playHit = (fighterObj,animName,onEnd) => {
-    if(!fighterObj) return
-    if([FS.KNOCKDOWN,FS.GETTING_UP,FS.KO].includes(fighterObj.state)) return
-    if(fighterObj.state===FS.ATTACKING){
-      // 공격 모션 full 재생 후 피격 (큐)
+  // 공격: IDLE에서만 시작. actionToken으로 오래된 공격 판정을 무효화한다.
+  const playAnim = (fighterObj,animName,loop=false,onEnd) => {
+    if(!fighterObj) return false
+    if(fighterObj.state!==FS.IDLE&&!loop) return false
+    if(!loop){
+      invalidateFighterAction(fighterObj)
+      fighterObj.currentMoveId=animName
+    }
+    const token=fighterObj.actionToken||0
+    return playClip(fighterObj,animName,{loop,state:loop?FS.IDLE:FS.ATTACKING,fade:0.15,tokenGuard:true,onEnd:()=>{
+      if(fighterObj.actionToken!==token) return
+      if(fighterObj.state===FS.ATTACKING){
+        fighterObj.state=FS.IDLE
+        fighterObj.currentMoveId=null
+        const queued=fighterObj.queuedHitAnim
+        fighterObj.queuedHitAnim=null
+        if(queued) queued()
+        else if(onEnd) onEnd()
+      }
+    }})
+  }
+
+  // 피격/방어 성공 리액션. 실제 피격은 force=true로 호출해 기존 공격 모션과 예약 판정을 즉시 끊는다.
+  const playHit = (fighterObj,animName,onEnd,{force=false}={}) => {
+    if(!fighterObj) return false
+    if([FS.KNOCKDOWN,FS.GETTING_UP,FS.KO].includes(fighterObj.state)) return false
+    if(fighterObj.state===FS.ATTACKING&&!force){
       fighterObj.queuedHitAnim=()=>playHit(fighterObj,animName,onEnd)
-      return
+      return false
     }
-    const glbAnim=ANIM_MAP[animName]||animName
-    const anim=fighterObj.actions[glbAnim]; if(!anim) return
-    const prev=fighterObj.currentAction
-    anim.reset();anim.setEffectiveWeight(1);anim.setEffectiveTimeScale(1)
-    anim.setLoop(THREE.LoopOnce,1);anim.clampWhenFinished=true;anim.play()
-    if(prev&&prev!==anim) prev.fadeOut(0.1)
-    fighterObj.currentAction=anim;fighterObj.currentWalkAnim=null
-    fighterObj.state=FS.HIT
-    const dur=anim.getClip().duration*1000
-    setTimeout(()=>{ if(fighterObj.state===FS.HIT){fighterObj.state=FS.IDLE;if(onEnd)onEnd()} },dur)
+    if(force) invalidateFighterAction(fighterObj)
+    const token=fighterObj.actionToken||0
+    return playClip(fighterObj,animName,{state:FS.HIT,fade:0.1,tokenGuard:true,onEnd:()=>{
+      if(fighterObj.actionToken!==token) return
+      if(fighterObj.state===FS.HIT){
+        fighterObj.state=FS.IDLE
+        if(onEnd) onEnd()
+      }
+    }})
   }
 
-  // 넉다운: 최고 우선순위. ATTACKING 중이면 큐에 저장 (counter는 즉시)
-  const playKnockdown = (fighterObj,animName) => {
-    if(!fighterObj) return
-    if([FS.GETTING_UP,FS.KO].includes(fighterObj.state)) return
-    const isCounter=animName==='counter_hit_takedown'
-    if(fighterObj.state===FS.ATTACKING&&!isCounter){
-      // 공격 모션 full 재생 후 넉다운 (큐)
+  // 넉다운/TD 피격: TD 계열은 상대 공격 모션과 예약된 공격 판정을 즉시 끊는 최고 우선순위 이벤트다.
+  const playKnockdown = (fighterObj,animName,{force=false}={}) => {
+    if(!fighterObj) return false
+    if([FS.GETTING_UP,FS.KO].includes(fighterObj.state)) return false
+    const isPriorityImpact=['hit_takedown','hit_takedown_pounding','counter_hit_takedown','counter_hit_takedown_pounding'].includes(animName)
+    const shouldForce=force||isPriorityImpact
+    if(fighterObj.state===FS.ATTACKING&&!shouldForce){
       fighterObj.queuedHitAnim=()=>playKnockdown(fighterObj,animName)
-      return
+      return false
     }
+    invalidateFighterAction(fighterObj)
     const dir=KNOCKDOWN_DIR[animName]||'back'
-    const glbAnim=ANIM_MAP[animName]||animName
-    const anim=fighterObj.actions[glbAnim]; if(!anim) return
-    const prev=fighterObj.currentAction
-    anim.reset();anim.setEffectiveWeight(1);anim.setEffectiveTimeScale(1)
-    anim.setLoop(THREE.LoopOnce,1);anim.clampWhenFinished=true;anim.play()
-    if(prev&&prev!==anim) prev.fadeOut(0.1)
-    fighterObj.currentAction=anim;fighterObj.currentWalkAnim=null
-    fighterObj.state=FS.KNOCKDOWN;fighterObj.knockdownDir=dir
-    fighterObj.canGetUp=false;fighterObj.getUpScheduled=false
-    const dur=anim.getClip().duration*1000
-    setTimeout(()=>{ if(fighterObj.state===FS.KNOCKDOWN) fighterObj.canGetUp=true },dur)
+    const token=fighterObj.actionToken||0
+    const played=playClip(fighterObj,animName,{state:FS.KNOCKDOWN,fade:0.08,tokenGuard:true,onEnd:()=>{
+      if(fighterObj.actionToken!==token) return
+      if(fighterObj.state===FS.KNOCKDOWN) fighterObj.canGetUp=true
+    }})
+    if(!played) return false
+    fighterObj.knockdownDir=dir
+    fighterObj.canGetUp=false
+    fighterObj.getUpScheduled=false
+    return true
   }
 
   const playForced = (fighterObj,animName,loop=false,onEnd) => {
-    if(!fighterObj) return
-    const glbAnim=ANIM_MAP[animName]||animName
-    const anim=fighterObj.actions[glbAnim]; if(!anim) return
-    const prev=fighterObj.currentAction
-    anim.reset();anim.setEffectiveWeight(1);anim.setEffectiveTimeScale(1)
-    anim.setLoop(loop?THREE.LoopRepeat:THREE.LoopOnce,1)
-    anim.clampWhenFinished=!loop;anim.play()
-    if(prev&&prev!==anim) prev.fadeOut(0.1)
-    fighterObj.currentAction=anim;fighterObj.currentWalkAnim=null;fighterObj.state=FS.KO
-    if(!loop&&onEnd) setTimeout(onEnd,anim.getClip().duration*1000)
+    if(!fighterObj) return false
+    invalidateFighterAction(fighterObj)
+    return playClip(fighterObj,animName,{loop,state:FS.KO,fade:0.1,onEnd})
   }
 
   const returnToIdle = (fighterObj,type) => {
@@ -292,7 +319,7 @@ export default function RisingStarArena() {
     if(idle){idle.setLoop(THREE.LoopRepeat,Infinity);idle.play()}
     return {group,mixer,actions,currentAction:idle,type,
       state:FS.IDLE,knockdownDir:null,canGetUp:false,getUpScheduled:false,
-      currentMoveId:null,counterWindowActive:false,
+      currentMoveId:null,counterWindowActive:false,actionToken:0,
       queuedHitAnim:null, // 공격 중 피격 큐
       currentWalkAnim:null,hips,baseHipsPosition}
   }
@@ -351,13 +378,13 @@ export default function RisingStarArena() {
       const pSt={current:Math.max(0,playerStaminaRef.current.current-38),max:Math.max(10,playerStaminaRef.current.max-8)}
       playerStaminaRef.current=pSt;setPlayerStamina({...pSt})
       if(checkSubmission({zone,defenderStamina:pSt,takedownCount:takedownCountRef.current.opponent})){handleFinish('opponent','Submission');return true}
-      playKnockdown(playerRef.current,'hit_takedown')
+      playKnockdown(playerRef.current,'hit_takedown',{force:true})
     } else if(checkKnockdown({damage:result.damage,zone,defenderStamina:playerStaminaRef.current,knockdownCount:knockdownCountRef.current.player})){
       knockdownCountRef.current.player+=1;roundEventsRef.current.opponent.knockdowns+=1
       setActionLog('💥 넉다운!')
-      playKnockdown(playerRef.current,Math.random()>0.5?'knockdown_back':'knockdown_front')
+      playKnockdown(playerRef.current,Math.random()>0.5?'knockdown_back':'knockdown_front',{force:true})
     } else {
-      playHit(playerRef.current,getHitAnim(moveId,result.damage))
+      playHit(playerRef.current,getHitAnim(moveId,result.damage),null,{force:true})
     }
     if(hk) roundEventsRef.current.opponent[hk==='head'?'headDamage':hk==='body'?'bodyDamage':'legDamage']+=result.damage
     const finish=checkFinish({headHP:newHP.head,bodyHP:newHP.body,legHP:newHP.leg,knockdownCount:knockdownCountRef.current.player})
@@ -374,13 +401,13 @@ export default function RisingStarArena() {
       const oSt={current:Math.max(0,opponentStaminaRef.current.current-38),max:Math.max(10,opponentStaminaRef.current.max-8)}
       opponentStaminaRef.current=oSt;setOpponentStamina({...oSt})
       if(checkSubmission({zone,defenderStamina:oSt,takedownCount:takedownCountRef.current.player})){handleFinish('player','Submission');return true}
-      playKnockdown(opponentRef.current,'hit_takedown');roundEventsRef.current.player.takedowns+=1
+      playKnockdown(opponentRef.current,'hit_takedown',{force:true});roundEventsRef.current.player.takedowns+=1
     } else if(checkKnockdown({damage:result.damage,zone,defenderStamina:opponentStaminaRef.current,knockdownCount:knockdownCountRef.current.opponent})){
       knockdownCountRef.current.opponent+=1;roundEventsRef.current.player.knockdowns+=1
       setActionLog('💥 넉다운!')
-      playKnockdown(opponentRef.current,Math.random()>0.5?'knockdown_back':'knockdown_front')
+      playKnockdown(opponentRef.current,Math.random()>0.5?'knockdown_back':'knockdown_front',{force:true})
     } else {
-      playHit(opponentRef.current,getHitAnim(moveId,result.damage))
+      playHit(opponentRef.current,getHitAnim(moveId,result.damage),null,{force:true})
     }
     if(hk) roundEventsRef.current.player[hk==='head'?'headDamage':hk==='body'?'bodyDamage':'legDamage']+=result.damage
     const finish=checkFinish({headHP:newHP.head,bodyHP:newHP.body,legHP:newHP.leg,knockdownCount:knockdownCountRef.current.opponent})
@@ -560,7 +587,6 @@ export default function RisingStarArena() {
       if(!moves.length)return
       const moveId=moves[Math.floor(Math.random()*moves.length)]
       aiCooldownRef.current=true
-      opponentRef.current.currentMoveId=moveId
 
       // TD 카운터 윈도우 (시작 시 300ms만 유효)
       if(moveId==='takedown'||moveId==='takedown_pounding'){
@@ -568,15 +594,26 @@ export default function RisingStarArena() {
         setTimeout(()=>{if(opponentRef.current)opponentRef.current.counterWindowActive=false},300)
       }
 
-      playAnim(opponentRef.current,moveId,false,()=>{
+      const attackStarted=playAnim(opponentRef.current,moveId,false,()=>{
         returnToIdle(opponentRef.current,opponent?.type||'W')
       })
+      if(!attackStarted){aiCooldownRef.current=false;return}
+      const attackToken=opponentRef.current.actionToken
+      // AI 기술별 접촉 타이밍
+      const _aIsKick = moveId.includes('kick')
+      const _aIsTD   = moveId.includes('takedown')
+      const _aSpeed  = _aIsTD ? (opponent.stats?.tdSpeed||80) : _aIsKick ? (opponent.stats?.kickSpeed||80) : (opponent.stats?.punchSpeed||80)
+      const aiHitDelay = Math.round((MOVE_ACTIVATION_MS[moveId]||280) * (80/_aSpeed))
       const result=calculateRealtimeAttack({moveId,attacker:opponent,defender:player,defenseState:defenseStateRef.current,attackerStamina:opponentStaminaRef.current})
       const ns={current:Math.max(0,opponentStaminaRef.current.current-result.staminaCost),max:Math.max(10,opponentStaminaRef.current.max-result.maxStaminaLoss)}
       opponentStaminaRef.current=ns;setOpponentStamina({...ns})
 
       setTimeout(()=>{
-        if(opponentRef.current)opponentRef.current.currentMoveId=null
+        if(!opponentRef.current||opponentRef.current.actionToken!==attackToken||opponentRef.current.state!==FS.ATTACKING){
+          aiCooldownRef.current=false
+          return
+        }
+        opponentRef.current.currentMoveId=null
         // 동시 공격: 플레이어가 우세했으면 AI 공격 무효화
         if(clashRef.current?.playerWins){
           clashRef.current=null;aiCooldownRef.current=false;return
@@ -586,7 +623,7 @@ export default function RisingStarArena() {
         if(result.blocked){
           setActionLog(`${player?.nickname} 방어 성공!`)
           const nhm={block_head:result.damage>=10?'no_hit_big_head':'no_hit_light_head',block_body:result.damage>=9?'no_hit_big_body':'no_hit_light_body',block_leg:'no_hit_leg',block_takedown:'no_hit_takedown'}
-          const na=nhm[defenseStateRef.current];if(na)playHit(playerRef.current,na)
+          const na=nhm[defenseStateRef.current];if(na)playHit(playerRef.current,na,null,{force:true})
           if(result.damage>0){const hk=result.hitZone==='head'?'head':result.hitZone==='body'?'body':'leg';const nh={...playerHPRef.current,[hk]:Math.max(0,playerHPRef.current[hk]-result.damage)};playerHPRef.current=nh;setPlayerHP({...nh})}
           const pSt={current:Math.max(0,playerStaminaRef.current.current-(result.defenseStaminaCost||6)),max:playerStaminaRef.current.max}
           playerStaminaRef.current=pSt;setPlayerStamina({...pSt})
@@ -597,7 +634,7 @@ export default function RisingStarArena() {
           setActionLog('상대 공격 빗나감!');roundEventsRef.current.opponent.missCount+=1
         }
         aiCooldownRef.current=false
-      },320)
+      }, aiHitDelay)
     },2000+Math.random()*800)
     return ()=>clearInterval(aiLoop)
   },[])
@@ -624,7 +661,7 @@ export default function RisingStarArena() {
     if(TD_COUNTER_MOVES.has(moveId)&&opponentRef.current?.counterWindowActive&&['takedown','takedown_pounding'].includes(opponentRef.current?.currentMoveId)){
       playAnim(playerRef.current,moveId)
       setTimeout(()=>{
-        playKnockdown(opponentRef.current,'counter_hit_takedown')
+        playKnockdown(opponentRef.current,'counter_hit_takedown',{force:true})
         setActionLog('💥 테이크다운 카운터!')
         aiCooldownRef.current=false
         setTimeout(()=>{if(playerRef.current?.state===FS.ATTACKING){playerRef.current.state=FS.IDLE;returnToIdle(playerRef.current,player?.type||'W');attackCooldownRef.current=false}},400)
@@ -653,21 +690,32 @@ export default function RisingStarArena() {
     }
 
     attackCooldownRef.current=true
-    playerRef.current.currentMoveId=moveId
     const result=calculateRealtimeAttack({moveId,attacker:player,defender:opponent,defenseState:null,attackerStamina:playerStaminaRef.current})
     const np={current:Math.max(0,playerStaminaRef.current.current-result.staminaCost),max:Math.max(10,playerStaminaRef.current.max-result.maxStaminaLoss)}
     playerStaminaRef.current=np;setPlayerStamina({...np})
     // 공격 모션 완전 종료 후 쿨다운 해제 (onEnd 콜백)
-    playAnim(playerRef.current,moveId,false,()=>{
+    const attackStarted=playAnim(playerRef.current,moveId,false,()=>{
       attackCooldownRef.current=false
       returnToIdle(playerRef.current,player?.type||'W')
     })
+    if(!attackStarted){attackCooldownRef.current=false;return}
+    const attackToken=playerRef.current.actionToken
+
+    // 기술별 시각적 접촉 타이밍 계산 (스피드 능력치 반영)
+    const _hIsKick = moveId.includes('kick')
+    const _hIsTD   = moveId.includes('takedown')
+    const _hSpeed  = _hIsTD ? (player.stats?.tdSpeed||80) : _hIsKick ? (player.stats?.kickSpeed||80) : (player.stats?.punchSpeed||80)
+    const hitDelay = Math.round((MOVE_ACTIVATION_MS[moveId]||280) * (80/_hSpeed))
 
     setTimeout(()=>{
-      if(playerRef.current)playerRef.current.currentMoveId=null
+      if(!playerRef.current||playerRef.current.actionToken!==attackToken||playerRef.current.state!==FS.ATTACKING){
+        attackCooldownRef.current=false
+        return
+      }
+      playerRef.current.currentMoveId=null
       if(!isTDMove&&getDist()>getMoveEffectiveRange(moveId)){
         setActionLog('빗나감!');roundEventsRef.current.player.missCount+=1
-        return // 쿨다운은 onEnd에서 처리
+        return
       }
       if(result.hit){
         setActionLog(`적중! -${result.damage}`)
@@ -677,7 +725,7 @@ export default function RisingStarArena() {
       } else {
         setActionLog('빗나감!');roundEventsRef.current.player.missCount+=1
       }
-    },280)
+    }, hitDelay)
   }
 
   const isDisabled=gameState!=='fighting'||!playerRef.current||playerStamina.current<15
